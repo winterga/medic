@@ -54,7 +54,7 @@ def process_single_image(input_image, threshold=0, padding=10):
         # If cropping was successful, save the new image, replacing the old one
         if cropped_image is not None:
             cv2.imwrite(input_image, cropped_image)
-            print(f"Cropped image saved to {input_image}.")
+            # print(f"Cropped image saved to {input_image}.")
         else:
             print(f"Skipping {input_image} due to cropping error.")
     else:

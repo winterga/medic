@@ -14,7 +14,7 @@ def resize_image(input_image, size=(512, 512)):
             with Image.open(input_image) as img:
                 img = img.resize(size, Image.LANCZOS)  # Resize image
                 img.save(input_image)  # Overwrite original image
-                print(f'Resized and overwritten: {input_image}')
+                # print(f'Resized and overwritten: {input_image}')
         except Exception as e:
             print(f'Error processing {input_image}: {e}')
 
