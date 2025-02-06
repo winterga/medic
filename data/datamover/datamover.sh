@@ -24,7 +24,7 @@ fi
 
 # Find all image files recursively in the input folder (supports jpg, jpeg, png)
 find "$input_folder" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | while read -r image; do
-    echo "Processing $image"
+    # echo "Processing $image"
 
     # Call the crop.py script on the image
     python3 "$crop_script" "$image"
