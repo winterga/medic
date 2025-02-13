@@ -80,7 +80,7 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
             num_frames = len(frame_paths)
 
             if num_frames > 0:
-                video_class_mapping[video_name][class_id] = num_frames
+                video_class_mapping[video_name][class_id] = frame_paths
                 if class_id not in class_video_groups:
                     class_video_groups[class_id] = []
                 class_video_groups[class_id].append((video_name, num_frames))
@@ -147,10 +147,13 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                 class_folder = os.path.join(split_dir, str(class_id))
 
                 video_class_folder = os.path.join(output_dir, video_name, str(class_id))
+                print(frame_paths)
+                print(video_class_folder)
                 for frame_name in frame_paths:
                     src_path = os.path.join(video_class_folder, frame_name)
                     dst_path = os.path.join(class_folder, frame_name)
-                    shutil.move(src_path, dst_path)
+                    # shutil.move(src_path, dst_path)
+                    shutil.copy(src_path, dst_path)
 
     # Step 5: Remove original video folders
     for video_name in video_class_mapping.keys():
