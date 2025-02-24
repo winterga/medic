@@ -13,7 +13,10 @@
 *.heif
 *.MP4
 
+/data/datamover_FE/*.txt
+/data/datamover_TS/*.txt
 # Ignore images inside specific folders (if needed)
 /data/*
 !/data/README.md
-!/data/datamover/
+!/data/datamover_TS/
+!/data/datamover_FE/

@@ -6,7 +6,7 @@ from torchvision.transforms import v2
 import torch.utils.data as data
 from torch.utils.data import Subset
 import torch.optim as optim
-
+from collections import Counter
 import time, os, copy
 from .resnet import resnet50
 import tqdm
@@ -32,6 +32,21 @@ def apply_gpu_transforms(image, transform_list):
     for t in transform_list:
         image = t(image)
     return image
+
+def get_class_weights(dataset):
+    """ Compute class weights for handling imbalance """
+    class_counts = Counter(dataset.targets)  # Count occurrences of each class
+    num_classes = len(class_counts)
+    total_samples = sum(class_counts.values())
+
+    # Compute weights: inverse frequency
+    weights = {cls: total_samples / (num_classes * count) for cls, count in class_counts.items()}
+
+    # Convert to tensor
+    weight_tensor = torch.tensor([weights[i] for i in range(num_classes)], dtype=torch.float)
+
+    print(f"Class Weights: {weight_tensor}")
+    return weight_tensor
 
 def load_train(params, hyper_params):
     cpu_train_list = [
@@ -80,14 +95,6 @@ def load_train(params, hyper_params):
     print(f"Unique labels in train dataset: {unique_train_labels}")
     print(f"Unique labels in valid dataset: {unique_valid_labels}")
     
-    subset_percentage = .1
-    # Get subset indices for each dataset (10% of each class)
-    subset_indices_train = get_subset_indices(dataset['train'], subset_percentage)
-    subset_indices_valid = get_subset_indices(dataset['valid'], subset_percentage)
-    
-    # Create subsets for each data split
-    train_subset = Subset(dataset['train'], subset_indices_train)
-    valid_subset = Subset(dataset['valid'], subset_indices_valid)
     # Size of train and validation data
     dataset_sizes = {
         'train': len(dataset['train']),
@@ -96,9 +103,9 @@ def load_train(params, hyper_params):
 
     # Create iterators for data loading
     dataloaders = {
-        'train': data.DataLoader(train_subset, batch_size=hyper_params['batch_size'], shuffle=True,
+        'train': data.DataLoader(dataset['train'], batch_size=hyper_params['batch_size'], shuffle=True,
                             num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
-        'valid': data.DataLoader(valid_subset, batch_size=hyper_params['batch_size'], shuffle=False,
+        'valid': data.DataLoader(dataset['valid'], batch_size=hyper_params['batch_size'], shuffle=False,
                             num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
     }
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -120,6 +127,9 @@ def train_model(params, hyper_params):
     model.to(device)
     print(f"Train: {next(model.parameters()).device}")
 
+    train_weights = get_class_weights(dataloaders['train'].dataset).to(device)
+    valid_weights = get_class_weights(dataloaders['valid'].dataset).to(device)
+
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = float('inf')
     logger = open(os.path.join(params['save_dir'], params['name'] + '.txt'), "w")
@@ -130,6 +140,7 @@ def train_model(params, hyper_params):
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'valid']:
+            criterion = nn.CrossEntropyLoss(weight=train_weights if phase == 'train' else valid_weights)
             if phase == 'train':
                 model.train()  # Set model to training mode
             else:
