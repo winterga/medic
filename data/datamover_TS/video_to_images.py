@@ -16,15 +16,18 @@ def get_video_length(video_path):
     return length
 
 def save_frames(video, video_splits, output_dir):
-    """Extract frames from the video and saves them in class folders (0, 1, 2, 3)."""
+    """Extract frames from the video and saves them in class folders (0, 1, 2)."""
     video_name = os.path.basename(video)
     cap = cv2.VideoCapture(video)
 
     # Print the intervals for the video once
     print(f"Processing video: {video_name}")
     video_intervals = video_splits.get(video_name, {})
-    print("Intervals:", video_intervals)
+    print("Intervals:", len(video_intervals))
 
+    if len(video_intervals) == 0:
+        print(f"⚠️ Skipping video {video_name} as it has no annotated intervals.")
+        return
     # Create a video folder
     video_folder = os.path.join(output_dir, video_name)
     os.makedirs(video_folder, exist_ok=True)
@@ -57,7 +60,7 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     Splits videos into Train, Val, Test while ensuring:
     1. Videos are NOT split across multiple datasets.
     2. Each dataset contains at least one video with every class.
-    3. Each dataset has **full class coverage** (i.e., all classes 0, 1, 2, 3 are present).
+    3. Each dataset has **full class coverage** (i.e., all classes 0, 1, 2 are present).
     """
 
     video_class_mapping = {}  # {video_name: {class_id: num_frames}}
@@ -106,30 +109,25 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                     break  # Ensuring class is represented in the split
 
     # Step 3b: Ensure each split has **full class coverage**
-    for split in ['train', 'val', 'test']:
-        present_classes = set()
-        for video in split_assignments[split]:
-            present_classes.update(video_class_mapping[video].keys())
+    class_2_videos = [video for video in video_class_mapping if "2" in video_class_mapping[video]]
 
-        missing_classes = {0, 1, 2, 3} - present_classes  # Find missing classes
+    # Ensure class 2 is evenly distributed first
+    split_targets = ['train', 'val', 'test']
+    for i, video in enumerate(class_2_videos):
+        split = split_targets[i % 2]  # Round-robin distribution
+        split_assignments[split].add(video)
+        remaining_videos.discard(video)
 
-        for class_id in missing_classes:
-            # Find a video that contains the missing class and hasn't been assigned yet
-            for video_name in class_video_groups.get(class_id, []):
-                if video_name in remaining_videos:
-                    split_assignments[split].add(video_name)
-                    remaining_videos.remove(video_name)
-                    break  # Stop once we've fixed one missing class
-
-    # Step 3c: Distribute remaining videos to balance the dataset
-    remaining_videos = list(remaining_videos)  # Convert to list for random shuffling
-    # random.shuffle(remaining_videos)  # Shuffle to randomize
+    # Now, distribute remaining videos to balance the dataset
+    remaining_videos = list(remaining_videos)  # Convert to list for shuffling
+    random.shuffle(remaining_videos)
 
     num_videos = len(video_class_mapping)
     train_count = int(train_ratio * num_videos)
     val_count = int(val_ratio * num_videos)
     test_count = num_videos - train_count - val_count
 
+    # Add remaining videos to each split
     split_assignments['train'].update(remaining_videos[:train_count])
     split_assignments['val'].update(remaining_videos[train_count:train_count + val_count])
     split_assignments['test'].update(remaining_videos[train_count + val_count:])
@@ -139,7 +137,7 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
         split_dir = os.path.join(output_dir, split)
         os.makedirs(split_dir, exist_ok=True)
 
-        for class_id in {0, 1, 2, 3}:  # Ensure class folders exist
+        for class_id in {0, 1, 2}:  # Ensure class folders exist
             os.makedirs(os.path.join(split_dir, str(class_id)), exist_ok=True)
 
         for video_name in videos:
@@ -165,7 +163,7 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     print("\n📊 **Final Split Assignments:**")
     for split in ['train', 'val', 'test']:
         print(f"\n🔹 **{split.upper()}**")
-        for class_id in {0, 1, 2, 3}:
+        for class_id in {0, 1, 2}:
             class_folder = os.path.join(output_dir, split, str(class_id))
             num_files = len(os.listdir(class_folder)) if os.path.exists(class_folder) else 0
             print(f"   - Class {class_id}: {num_files} images")
