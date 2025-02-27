@@ -91,7 +91,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the optimizer')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for the optimizer')
     parser.add_argument('--epochs', type=int, default=150, help='Number of training/validation iterations before testing')
     parser.add_argument('--t_max', type=int, default=150, help='Value for learning rate scheduler -- likely to equal # of epochs but could be different if running experiments with diff epochs')
     parser.add_argument('--manual_seed', type=int, default=42, help='Seed Value')
