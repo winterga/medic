@@ -13,6 +13,7 @@ import tqdm
 import random
 
 from .TCN import TCN, TCNWrapper
+from .TCN import VideoSegmenetDataset
 
 def get_subset_indices(dataset, subset_percentage=0.1):
     """
@@ -59,8 +60,8 @@ def load_train(params, hyper_params):
     }
     # Load data from folders
     dataset = {
-        'train': datasets.ImageFolder(root=params['train_dir'], transform=image_transforms['train']),
-        'valid': datasets.ImageFolder(root=params['valid_dir'], transform=image_transforms['valid']),
+        'train': VideoSegmentDataset(root_dir=params['train_dir'], seq_length=hyper_params['seq_length'], transform=video_transform),
+        'valid': VideoSegmentDataset(root_dir=params['valid_dir'], seq_length=hyper_params['seq_length'], transform=video_transform),
     }
     
     def remap_labels(dataset, old_label, new_label):
@@ -71,16 +72,16 @@ def load_train(params, hyper_params):
     unique_train_labels = set(dataset['train'].targets)
     unique_valid_labels = set(dataset['valid'].targets)
 
-    print(f"Unique labels in train dataset: {unique_train_labels}") # print out old labels
-    print(f"Unique labels in valid dataset: {unique_valid_labels}") # print out old labels
-    remap_labels(dataset['train'], old_label=3, new_label=1) # remap labels
-    remap_labels(dataset['valid'], old_label=3, new_label=1)
+    # print(f"Unique labels in train dataset: {unique_train_labels}") # print out old labels
+    # print(f"Unique labels in valid dataset: {unique_valid_labels}") # print out old labels
+    # remap_labels(dataset['train'], old_label=3, new_label=1) # remap labels
+    # remap_labels(dataset['valid'], old_label=3, new_label=1)
 
-    unique_train_labels = set(dataset['train'].targets) # get new labels
-    unique_valid_labels = set(dataset['valid'].targets)
+    # unique_train_labels = set(dataset['train'].targets) # get new labels
+    # unique_valid_labels = set(dataset['valid'].targets)
 
-    print(f"Unique labels in train dataset: {unique_train_labels}") # print new labels
-    print(f"Unique labels in valid dataset: {unique_valid_labels}")
+    # print(f"Unique labels in train dataset: {unique_train_labels}") # print new labels
+    # print(f"Unique labels in valid dataset: {unique_valid_labels}")
     
     subset_percentage = .1
     # Get subset indices for each dataset (10% of each class)
