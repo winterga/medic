@@ -71,15 +71,15 @@ def load_train(params, hyper_params):
     unique_train_labels = set(dataset['train'].targets)
     unique_valid_labels = set(dataset['valid'].targets)
 
-    print(f"Unique labels in train dataset: {unique_train_labels}")
-    print(f"Unique labels in valid dataset: {unique_valid_labels}")
-    remap_labels(dataset['train'], old_label=3, new_label=1)
+    print(f"Unique labels in train dataset: {unique_train_labels}") # print out old labels
+    print(f"Unique labels in valid dataset: {unique_valid_labels}") # print out old labels
+    remap_labels(dataset['train'], old_label=3, new_label=1) # remap labels
     remap_labels(dataset['valid'], old_label=3, new_label=1)
 
-    unique_train_labels = set(dataset['train'].targets)
+    unique_train_labels = set(dataset['train'].targets) # get new labels
     unique_valid_labels = set(dataset['valid'].targets)
 
-    print(f"Unique labels in train dataset: {unique_train_labels}")
+    print(f"Unique labels in train dataset: {unique_train_labels}") # print new labels
     print(f"Unique labels in valid dataset: {unique_valid_labels}")
     
     subset_percentage = .1
@@ -106,15 +106,21 @@ def load_train(params, hyper_params):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    model_ft = torch.load('/home/local/VANDERBILT/winterga/medic/feature_extractor/checkpoints/Resnet50_021225_07/Resnet50_021225_07.pth', map_location=device)
+    # Load feature extractor
+    feature_extractor = torch.load('/home/local/VANDERBILT/winterga/medic/feature_extractor/checkpoints/Resnet50_021225_07/Resnet50_021225_07.pth', map_location=device)
+        
+    # Set up TCN model for training
+    tcn_model = TCN(num_inputs=3, num_channels=[16, 32, 64], kernel_size=3, dropout=0.1)
+    model = TCNWrapper(tcn_model, feature_extractor, input_shape='NLC')  # Wrap TCN with ResNet feature extractor
+    model.to(device) # Move model to GPU
+    
     activation = nn.Softmax(dim=1)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model_ft.parameters(), lr=hyper_params['learning_rate'])
+    
+    # Ensure only TCN-specific parameters get updated during training
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = optim.AdamW(trainable_params, lr=hyper_params['learning_rate'])
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=hyper_params['num_epochs'], eta_min=hyper_params['learning_rate']/100.)
-
-    tcn_model = TCN(num_inputs=3, num_channels=[16, 32, 64], kernel_size=3, dropout=0.1)
-    model = TCNWrapper(tcn_model, model_ft, input_shape='NLC')  # Wrap TCN with ResNet feature extractor
-    model.to(device)
 
     return model, dataloaders, dataset_sizes, criterion, optimizer, scheduler, activation, device, gpu_train_list
 
