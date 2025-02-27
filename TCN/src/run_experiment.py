@@ -13,6 +13,7 @@ import glob
 import argparse
 import multiprocessing
 import warnings
+from torch.utils.data import DataLoader
 
 from .TCN import TCNWrapper
 
@@ -95,7 +96,7 @@ if __name__ == '__main__':
     num_cores = os.cpu_count()
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
-    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer')
+    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer') # not used
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the optimizer')
     parser.add_argument('--epochs', type=int, default=150, help='Number of training/validation iterations before testing')
     parser.add_argument('--t_max', type=int, default=150, help='Value for learning rate scheduler -- likely to equal # of epochs but could be different if running experiments with diff epochs')
@@ -113,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--elastic', action='store_true', help='Enable elastic transformation augmentation')
     parser.add_argument('--grayscale', action='store_true', help='Enable grayscale augmentation')
     parser.add_argument('--architecture', type=str, default='TCN', help='Architecture to use for the model') # edit this part later
-    parser.add_argument('--cpu_count', type=int, default=num_cores+1, help='Number of CPU cores to use')
+    parser.add_argument('--cpu_count', type=int, default=max(1,args.cpu_count-5), help='Number of CPU cores to use')
     parser.add_argument('--pretrained', action='store_true', default=False, help='Use a pretrained model')
     parser.add_argument('--num_augs', type=int, default=0, help='Number of augmentations to use')
     parser.add_argument('--base_dir', type=str, required=True, help='Base directory containing train, val, and test subdirectories')
@@ -139,7 +140,7 @@ if __name__ == '__main__':
         "architecture": args.architecture,
         'n_channels': args.n_channels,
         'n_classes': 1,
-        'cpu_count': args.cpu_count-5,
+        'cpu_count': args.cpu_count,
         'activation': 'Sigmoid',
         'augmentation': 'bestaug',
         'normalize':True,
@@ -172,6 +173,6 @@ if __name__ == '__main__':
 
     # Set a manual seed here
     set_manual_seed(hyper_params['manual_seed'])
-    # torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True
     
     run_experiment(params, hyper_params)

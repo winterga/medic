@@ -101,8 +101,9 @@ if __name__ == "__main__":
     
     # Load feature extractor
     # resnet_model_path = '/home/local/VANDERBILT/winterga/medic/feature_extractor/checkpoints/Resnet50_021225_07/Resnet50_021225_07.pth'
-    resnet_model_path = 'C:\\vanderbiltCS\\cs4359\\medic\\feature_extractor\\checkpoints\\Resnet50_021225_07\\Resnet50_021225_07.pth'
+    resnet_model_path = '/home/local/VANDERBILT/winterga/medic/feature_extractor/checkpoints/Resnet50_022125_12/Resnet50_022125_12.pth'
     FE = torch.load(f=resnet_model_path, map_location=device, weights_only=False)
+
 
     
     # Define TCN

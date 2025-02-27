@@ -13,7 +13,7 @@ import tqdm
 import random
 
 from .TCN import TCN, TCNWrapper
-from .TCN import VideoSegmenetDataset
+from .VideoSegmentDataset import VideoSegmentDataset
 
 def get_subset_indices(dataset, subset_percentage=0.1):
     """
@@ -111,7 +111,7 @@ def load_train(params, hyper_params):
     feature_extractor = torch.load('/home/local/VANDERBILT/winterga/medic/feature_extractor/checkpoints/Resnet50_021225_07/Resnet50_021225_07.pth', map_location=device)
         
     # Set up TCN model for training
-    tcn_model = TCN(num_inputs=3, num_channels=[16, 32, 64], kernel_size=3, dropout=0.1)
+    tcn_model = TCN(num_inputs=2048, num_channels=[16, 32, 64], kernel_size=3, dropout=0.1)
     model = TCNWrapper(tcn_model, feature_extractor, input_shape='NLC')  # Wrap TCN with ResNet feature extractor
     model.to(device) # Move model to GPU
     

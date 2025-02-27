@@ -21,6 +21,7 @@ class VideoSegmentDataset(Dataset):
         # Iterate through each video folder
         for video_name in os.listdir(root_dir):
             video_path = os.path.join(root_dir, video_name)
+            print(f"Organizing data for the following video path: {video_path}")
             if not os.path.isdir(video_path):
                 continue
             
@@ -36,7 +37,9 @@ class VideoSegmentDataset(Dataset):
                 for i in range(0, len(frame_paths) - seq_length + 1, seq_length):
                     seq_frames = frame_paths[i:i+seq_length]
                     self.data.append((seq_frames, int(class_label)))
+                print(f"Finished processing class {class_label} in video {video_name}")
 
+        
     def __len__(self):
         return len(self.data)
 
