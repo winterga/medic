@@ -20,3 +20,8 @@
 !/data/README.md
 !/data/datamover_TS/
 !/data/datamover_FE/
+
+# Ignore virtual environment
+/.venv
+
+*/__pycache__/

@@ -1,14 +1,14 @@
 # from comet_ml import Experiment
 
 import os
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+# os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import torch
 import numpy as np
 import random
 
 from datetime import datetime
 
-from .train import train_model
+from .train_TCN import train_model
 import glob
 import argparse
 import multiprocessing
@@ -114,11 +114,12 @@ if __name__ == '__main__':
     parser.add_argument('--elastic', action='store_true', help='Enable elastic transformation augmentation')
     parser.add_argument('--grayscale', action='store_true', help='Enable grayscale augmentation')
     parser.add_argument('--architecture', type=str, default='TCN', help='Architecture to use for the model') # edit this part later
-    parser.add_argument('--cpu_count', type=int, default=max(1,args.cpu_count-5), help='Number of CPU cores to use')
+    parser.add_argument('--cpu_count', type=int, default=5, help='Number of CPU cores to use')
     parser.add_argument('--pretrained', action='store_true', default=False, help='Use a pretrained model')
     parser.add_argument('--num_augs', type=int, default=0, help='Number of augmentations to use')
     parser.add_argument('--base_dir', type=str, required=True, help='Base directory containing train, val, and test subdirectories')
     parser.add_argument('--embedding_size', type=int, default=2, help='Size of the embedding layer')
+    parser.add_argument('--seq_length', type=int, default=8, help='Length of the sequence')
     args = parser.parse_args()
     print(f'Arch: {args.architecture}')
     print(f'Pretrained: {args.pretrained}')
@@ -134,14 +135,14 @@ if __name__ == '__main__':
         "num_epochs": args.epochs,
         "t_max": args.t_max,
         "img_size": 512,
-        'criterion': 'BCEWithLogits', # FIXME CHECK IF WORKS WITH TCN
+        'criterion': 'CrossEntropyLoss', # FIXME CHECK IF WORKS WITH TCN
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
         "architecture": args.architecture,
         'n_channels': args.n_channels,
-        'n_classes': 1,
+        'n_classes': 3,
         'cpu_count': args.cpu_count,
-        'activation': 'Sigmoid',
+        'activation': None, # might do Softmax -> this is because Pytorch's CrossEntropyLoss expects raw logits
         'augmentation': 'bestaug',
         'normalize':True,
         'manual_seed': args.manual_seed,
@@ -159,6 +160,7 @@ if __name__ == '__main__':
         'pretrained': args.pretrained,
         'num_augs': args.num_augs,
         'embedding_size': args.embedding_size,
+        'seq_length': args.seq_length,
     }
     params = {
         'train_dir': data_dirs['train_dir'],

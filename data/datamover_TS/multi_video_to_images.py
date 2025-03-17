@@ -16,6 +16,18 @@ def get_video_length(video_path):
     capture.release()
     return length
 
+# Used for multi-threading in Step 4 of split_frames function
+def save_move_videos(video_class_mapping, video_name, split_dir, output_dir):
+    for class_id, frame_paths in video_class_mapping[video_name].items():
+                class_folder = os.path.join(split_dir, str(class_id))
+
+                video_class_folder = os.path.join(output_dir, video_name, str(class_id))
+                for frame_name in frame_paths:
+                    src_path = os.path.join(video_class_folder, frame_name)
+                    dst_path = os.path.join(class_folder, frame_name)
+                    # shutil.move(src_path, dst_path)
+                    shutil.copy(src_path, dst_path)
+
 
 def save_frames(video, video_splits, output_dir):
     """Extract frames from the video and saves them in class folders (0, 1, 2)."""
@@ -57,7 +69,7 @@ def save_frames(video, video_splits, output_dir):
         frame_count += 1
     cap.release()
 
-def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
+def split_frames(output_dir, max_workers, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     """
     Splits videos into Train, Val, Test while ensuring:
     1. Videos are NOT split across multiple datasets.
@@ -142,18 +154,9 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
         for class_id in {0, 1, 2}:  # Ensure class folders exist
             os.makedirs(os.path.join(split_dir, str(class_id)), exist_ok=True)
 
-        for video_name in videos:
-            for class_id, frame_paths in video_class_mapping[video_name].items():
-                class_folder = os.path.join(split_dir, str(class_id))
-
-                video_class_folder = os.path.join(output_dir, video_name, str(class_id))
-                print(frame_paths)
-                print(video_class_folder)
-                for frame_name in frame_paths:
-                    src_path = os.path.join(video_class_folder, frame_name)
-                    dst_path = os.path.join(class_folder, frame_name)
-                    # shutil.move(src_path, dst_path)
-                    shutil.copy(src_path, dst_path)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for video_name in videos:
+                executor.submit(save_move_videos, video_class_mapping, video_name, split_dir, output_dir)
 
     # Step 5: Remove original video folders
     for video_name in video_class_mapping.keys():
@@ -177,7 +180,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--videos_dir', type=str, default='/home/user/Desktop/Research/Raw Data/residuals/Square', help='Path to the directory containing videos.')
     parser.add_argument('--output_dir', type=str, default='/home/user/Desktop/Research/Raw Data/test', help='Path to the output directory for frames.')
-    parser.add_argument('--num_workers', type=int, default=max(1,os.cpu_count - 5), help='Number of worker threads for frame extraction.')
+    parser.add_argument('--num_workers', type=int, default=max(1,os.cpu_count()-5), help='Number of worker threads for frame extraction.')
     args = parser.parse_args()
 
     video_directory = args.videos_dir
@@ -199,6 +202,6 @@ if __name__ == "__main__":
     #         save_frames(video_path, video_splits, args.output_dir)
 
     # Step 2: Split frames into train, val, and test sets
-    split_frames(args.output_dir)
+    split_frames(args.output_dir, max_workers=args.num_workers)
 
     print("✅ Frame extraction complete.")
