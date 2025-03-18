@@ -87,7 +87,7 @@ def set_manual_seed(seed_value=42):
     torch.cuda.manual_seed(seed_value)
     torch.cuda.manual_seed_all(seed_value)
     torch.backends.cudnn.deterministic = True  # Ensure deterministic behavior
-    torch.backends.cudnn.benchmark = False     # May slow down training a bit, but makes sure results are reproducible
+    torch.backends.cudnn.benchmark = True     # update: changed to true from false # May slow down training a bit, but makes sure results are reproducible
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 if __name__ == '__main__':
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer') # not used
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the optimizer')
+    parser.add_argument('--batch_size', type=int, default=1, help='Batch size for the optimizer')
     parser.add_argument('--epochs', type=int, default=150, help='Number of training/validation iterations before testing')
     parser.add_argument('--t_max', type=int, default=150, help='Value for learning rate scheduler -- likely to equal # of epochs but could be different if running experiments with diff epochs')
     parser.add_argument('--manual_seed', type=int, default=42, help='Seed Value')
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         "batch_size": args.batch_size,
         "num_epochs": args.epochs,
         "t_max": args.t_max,
-        "img_size": 512,
+        "img_size": 224,
         'criterion': 'CrossEntropyLoss', # FIXME CHECK IF WORKS WITH TCN
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
