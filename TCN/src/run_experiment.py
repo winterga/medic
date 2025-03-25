@@ -1,18 +1,19 @@
 # from comet_ml import Experiment
 
 import os
-os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+# os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import torch
 import numpy as np
 import random
 
 from datetime import datetime
 
-from .train import train_model
+from .train_TCN import train_model
 import glob
 import argparse
 import multiprocessing
 import warnings
+from torch.utils.data import DataLoader
 
 from .TCN import TCNWrapper
 
@@ -86,7 +87,7 @@ def set_manual_seed(seed_value=42):
     torch.cuda.manual_seed(seed_value)
     torch.cuda.manual_seed_all(seed_value)
     torch.backends.cudnn.deterministic = True  # Ensure deterministic behavior
-    torch.backends.cudnn.benchmark = False     # May slow down training a bit, but makes sure results are reproducible
+    torch.backends.cudnn.benchmark = True     # update: changed to true from false # May slow down training a bit, but makes sure results are reproducible
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 if __name__ == '__main__':
@@ -95,8 +96,8 @@ if __name__ == '__main__':
     num_cores = os.cpu_count()
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
-    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for the optimizer')
+    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer') # not used
+    parser.add_argument('--batch_size', type=int, default=1, help='Batch size for the optimizer')
     parser.add_argument('--epochs', type=int, default=150, help='Number of training/validation iterations before testing')
     parser.add_argument('--t_max', type=int, default=150, help='Value for learning rate scheduler -- likely to equal # of epochs but could be different if running experiments with diff epochs')
     parser.add_argument('--manual_seed', type=int, default=42, help='Seed Value')
@@ -113,11 +114,12 @@ if __name__ == '__main__':
     parser.add_argument('--elastic', action='store_true', help='Enable elastic transformation augmentation')
     parser.add_argument('--grayscale', action='store_true', help='Enable grayscale augmentation')
     parser.add_argument('--architecture', type=str, default='TCN', help='Architecture to use for the model') # edit this part later
-    parser.add_argument('--cpu_count', type=int, default=num_cores+1, help='Number of CPU cores to use')
+    parser.add_argument('--cpu_count', type=int, default=5, help='Number of CPU cores to use')
     parser.add_argument('--pretrained', action='store_true', default=False, help='Use a pretrained model')
     parser.add_argument('--num_augs', type=int, default=0, help='Number of augmentations to use')
     parser.add_argument('--base_dir', type=str, required=True, help='Base directory containing train, val, and test subdirectories')
     parser.add_argument('--embedding_size', type=int, default=2, help='Size of the embedding layer')
+    parser.add_argument('--seq_length', type=int, default=8, help='Length of the sequence')
     args = parser.parse_args()
     print(f'Arch: {args.architecture}')
     print(f'Pretrained: {args.pretrained}')
@@ -132,15 +134,15 @@ if __name__ == '__main__':
         "batch_size": args.batch_size,
         "num_epochs": args.epochs,
         "t_max": args.t_max,
-        "img_size": 512,
-        'criterion': 'BCEWithLogits', # FIXME CHECK IF WORKS WITH TCN
+        "img_size": 224,
+        'criterion': 'CrossEntropyLoss', # FIXME CHECK IF WORKS WITH TCN
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
         "architecture": args.architecture,
         'n_channels': args.n_channels,
-        'n_classes': 1,
-        'cpu_count': args.cpu_count-5,
-        'activation': 'Sigmoid',
+        'n_classes': 3,
+        'cpu_count': args.cpu_count,
+        'activation': None, # might do Softmax -> this is because Pytorch's CrossEntropyLoss expects raw logits
         'augmentation': 'bestaug',
         'normalize':True,
         'manual_seed': args.manual_seed,
@@ -158,6 +160,7 @@ if __name__ == '__main__':
         'pretrained': args.pretrained,
         'num_augs': args.num_augs,
         'embedding_size': args.embedding_size,
+        'seq_length': args.seq_length,
     }
     params = {
         'train_dir': data_dirs['train_dir'],
@@ -172,6 +175,6 @@ if __name__ == '__main__':
 
     # Set a manual seed here
     set_manual_seed(hyper_params['manual_seed'])
-    # torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True
     
     run_experiment(params, hyper_params)
