@@ -10,6 +10,7 @@ import random
 from datetime import datetime
 
 from .train import train_model
+from .only_test import test_model
 import glob
 import argparse
 import multiprocessing
@@ -70,9 +71,9 @@ def run_experiment(params, hyper_params):
     params.update(set_data_directories(params['base_dir']))
 
 
-    train_model(params, hyper_params)
+    # train_model(params, hyper_params)
     # hyper_params['batch_size'] =1
-    # test_model(params, hyper_params)
+    test_model(params, hyper_params)
 
 def set_manual_seed(seed_value=42):
     torch.manual_seed(seed_value)

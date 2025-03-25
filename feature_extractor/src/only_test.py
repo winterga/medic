@@ -57,6 +57,10 @@ def load_train(params, hyper_params):
         v2.Resize(size=(hyper_params['img_size'], hyper_params['img_size'])),
         v2.ToTensor(),
     ]
+    cpu_test_list = [
+        v2.Resize(size=(hyper_params['img_size'], hyper_params['img_size'])),
+        v2.ToTensor(),
+    ]
 
     # GPU-based transforms for heavy augmentations
     gpu_train_list = []
@@ -65,15 +69,19 @@ def load_train(params, hyper_params):
         cpu_train_list.append(v2.Normalize([0.485, 0.456, 0.406],
                                            [0.229, 0.224, 0.225]))
         cpu_valid_list.append(v2.Normalize([0.485, 0.456, 0.406],
+                                           [0.229, 0.224, 0.225])),
+        cpu_test_list.append(v2.Normalize([0.485, 0.456, 0.406],
                                            [0.229, 0.224, 0.225]))
     image_transforms = {
         'train': v2.Compose(cpu_train_list),
-        'valid': v2.Compose(cpu_valid_list)
+        'valid': v2.Compose(cpu_valid_list),
+        'test': v2.Compose(cpu_test_list)
     }
     # Load data from folders
     dataset = {
         'train': datasets.ImageFolder(root=params['train_dir'], transform=image_transforms['train']),
         'valid': datasets.ImageFolder(root=params['valid_dir'], transform=image_transforms['valid']),
+        'test': datasets.ImageFolder(root=params['test_dir'], transform=image_transforms['test'])
     }
     
     def remap_labels(dataset, old_label, new_label):
@@ -83,22 +91,28 @@ def load_train(params, hyper_params):
     # Remap labels for binary classification
     unique_train_labels = set(dataset['train'].targets)
     unique_valid_labels = set(dataset['valid'].targets)
+    unique_test_labels = set(dataset['test'].targets)
 
     print(f"Unique labels in train dataset: {unique_train_labels}")
     print(f"Unique labels in valid dataset: {unique_valid_labels}")
+    print(f"Unique labels in test dataset: {unique_test_labels}")
     remap_labels(dataset['train'], old_label=3, new_label=1)
     remap_labels(dataset['valid'], old_label=3, new_label=1)
+    remap_labels(dataset['test'], old_label=3, new_label=1)
 
     unique_train_labels = set(dataset['train'].targets)
     unique_valid_labels = set(dataset['valid'].targets)
+    unique_test_labels = set(dataset['test'].targets)
 
     print(f"Unique labels in train dataset: {unique_train_labels}")
     print(f"Unique labels in valid dataset: {unique_valid_labels}")
+    print(f"Unique labels in test dataset: {unique_test_labels}")
     
     # Size of train and validation data
     dataset_sizes = {
         'train': len(dataset['train']),
-        'valid': len(dataset['valid'])
+        'valid': len(dataset['valid']),
+        'test': len(dataset['test'])
     }
 
     # Create iterators for data loading
@@ -107,11 +121,13 @@ def load_train(params, hyper_params):
                             num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
         'valid': data.DataLoader(dataset['valid'], batch_size=hyper_params['batch_size'], shuffle=False,
                             num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
+        'test': data.DataLoader(dataset['test'], batch_size=hyper_params['batch_size'], shuffle=False,
+                            num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True)
     }
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    model_ft = resnet50(num_classes=3, num_channels=3)
+    model_ft = torch.load("/home/user/Documents/GitHub/medic/feature_extractor/checkpoints/Resnet50_022125_12/Resnet50_022125_12.pth")
     activation = nn.Softmax(dim=1)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model_ft.parameters(), lr=hyper_params['learning_rate'])
@@ -120,7 +136,7 @@ def load_train(params, hyper_params):
     return model_ft, dataloaders, dataset_sizes, criterion, optimizer, scheduler, activation, device, gpu_train_list
 
 
-def train_model(params, hyper_params):
+def test_model(params, hyper_params):
     since = time.time()
 
     model, dataloaders, data_sizes, criterion, optimizer, scheduler, activation, device, gpu_train_list = load_train(params, hyper_params)
@@ -139,7 +155,7 @@ def train_model(params, hyper_params):
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'valid']:
+        for phase in ['test']:
             criterion = nn.CrossEntropyLoss(weight=train_weights if phase == 'train' else valid_weights)
             if phase == 'train':
                 model.train()  # Set model to training mode
@@ -204,6 +220,8 @@ def train_model(params, hyper_params):
                 print(f"Class {cls}: {accuracy:.2f}%")
 
             # deep copy the model
+            print("Overall Loss:", epoch_loss)
+            print("Overall Acc:", epoch_acc)
             if phase == 'train':
                 print(f'Training Loss: {epoch_loss}')
                 print(f'Training Acc: {epoch_acc}')
