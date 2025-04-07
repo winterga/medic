@@ -15,8 +15,6 @@ import multiprocessing
 import warnings
 from torch.utils.data import DataLoader
 
-from .TCN import TCNWrapper
-
 warnings.filterwarnings("ignore")
 
 def create_exp_name(params, hyperparams):
@@ -71,9 +69,9 @@ def run_experiment(params, hyper_params):
     params, hyper_params = create_exp_name(params, hyper_params)
     params.update(set_data_directories(params['base_dir']))
 
-    if hyper_params["architecture"] == "TCN":
-        # fix later
-        do = 8 # FIXME
+    # if hyper_params["architecture"] == "TCN":
+    #     # fix later
+    #     do = 8 # FIXME
 
 
     train_model(params, hyper_params)
@@ -97,7 +95,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer') # not used
-    parser.add_argument('--batch_size', type=int, default=1, help='Batch size for the optimizer')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for the optimizer')
     parser.add_argument('--epochs', type=int, default=150, help='Number of training/validation iterations before testing')
     parser.add_argument('--t_max', type=int, default=150, help='Value for learning rate scheduler -- likely to equal # of epochs but could be different if running experiments with diff epochs')
     parser.add_argument('--manual_seed', type=int, default=42, help='Seed Value')
@@ -134,7 +132,8 @@ if __name__ == '__main__':
         "batch_size": args.batch_size,
         "num_epochs": args.epochs,
         "t_max": args.t_max,
-        "img_size": 224,
+        # "img_size": 512,
+        # "img_size": 224,
         'criterion': 'CrossEntropyLoss', # FIXME CHECK IF WORKS WITH TCN
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
