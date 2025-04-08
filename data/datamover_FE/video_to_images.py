@@ -5,6 +5,7 @@ import shutil
 import math
 import argparse
 from video_splits import video_splits
+import time
 
 def get_video_length(video_path):
     """Returns the length of the video in seconds."""
@@ -60,6 +61,7 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     3. Each dataset has **full class coverage** (i.e., all classes 0, 1, 2, 3 are present).
     """
 
+    start_1_time = time.time()
     video_class_mapping = {}  # {video_name: {class_id: num_frames}}
     class_video_groups = {}  # {class_id: [videos_containing_class]}
 
@@ -84,16 +86,25 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                 if class_id not in class_video_groups:
                     class_video_groups[class_id] = []
                 class_video_groups[class_id].append((video_name, num_frames))
+    end_1_time = time.time()
+    print(f"Step 1: {end_1_time - start_1_time}")
 
     # Step 2: Sort videos within each class by frame count (largest → smallest)
+    start_2_time = time.time()
     for class_id in class_video_groups:
         class_video_groups[class_id].sort(key=lambda x: x[1], reverse=True)
+    end_2_time = time.time()
+    print(f"Step 2: {end_2_time - start_2_time}")
 
     # Step 3: Assign videos to Train, Val, Test
+    start_3_time = time.time()
     split_assignments = {'train': set(), 'val': set(), 'test': set()}
     remaining_videos = set(video_class_mapping.keys())
+    end_3_time = time.time()
+    print(f"Step 3: {end_3_time - start_3_time}")
 
     # Step 3a: Ensure every split contains at least one video per class
+    start_3a_time = time.time()
     for class_id, video_list in class_video_groups.items():
         for split in ['train', 'val', 'test']:
             valid_video_list = [video for video, _ in video_list if class_id in video_class_mapping[video]]
@@ -104,7 +115,10 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                     split_assignments[split].add(video_name)
                     remaining_videos.remove(video_name)
                     break  # Ensuring class is represented in the split
+    end_3a_time = time.time()
+    print(f"Step 3a: {end_3a_time - start_3a_time}")
 
+    start_3b_time = time.time()
     # Step 3b: Ensure each split has **full class coverage**
     for split in ['train', 'val', 'test']:
         present_classes = set()
@@ -120,8 +134,11 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                     split_assignments[split].add(video_name)
                     remaining_videos.remove(video_name)
                     break  # Stop once we've fixed one missing class
+    end_3b_time = time.time()
+    print(f"Step 3b: {end_3b_time - start_3b_time}")
 
     # Step 3c: Distribute remaining videos to balance the dataset
+    start_3c_time = time.time()
     remaining_videos = list(remaining_videos)  # Convert to list for random shuffling
     # random.shuffle(remaining_videos)  # Shuffle to randomize
 
@@ -133,8 +150,11 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
     split_assignments['train'].update(remaining_videos[:train_count])
     split_assignments['val'].update(remaining_videos[train_count:train_count + val_count])
     split_assignments['test'].update(remaining_videos[train_count + val_count:])
+    end_3c_time = time.time()
+    print(f"Step 3c: {end_3c_time - start_3c_time}")
 
     # Step 4: Move images into corresponding train/val/test directories
+    start_4_time = time.time()
     for split, videos in split_assignments.items():
         split_dir = os.path.join(output_dir, split)
         os.makedirs(split_dir, exist_ok=True)
@@ -154,12 +174,17 @@ def split_frames(output_dir, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
                     dst_path = os.path.join(class_folder, frame_name)
                     # shutil.move(src_path, dst_path)
                     shutil.copy(src_path, dst_path)
+    end_4_time = time.time()
+    print(f"Step 4: {end_4_time - start_4_time}")
 
     # Step 5: Remove original video folders
+    start_5_time = time.time()
     for video_name in video_class_mapping.keys():
         video_folder = os.path.join(output_dir, video_name)
         if os.path.isdir(video_folder):
             shutil.rmtree(video_folder)
+    end_5_time = time.time()
+    print(f"Step 5: {end_5_time - start_5_time}")
 
     # Step 6: Debugging - Print split distributions
     print("\n📊 **Final Split Assignments:**")

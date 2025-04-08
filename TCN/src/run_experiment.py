@@ -85,7 +85,7 @@ def set_manual_seed(seed_value=42):
     torch.cuda.manual_seed(seed_value)
     torch.cuda.manual_seed_all(seed_value)
     torch.backends.cudnn.deterministic = True  # Ensure deterministic behavior
-    torch.backends.cudnn.benchmark = False     # May slow down training a bit, but makes sure results are reproducible
+    torch.backends.cudnn.benchmark = True     # update: changed to true from false # May slow down training a bit, but makes sure results are reproducible
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 if __name__ == '__main__':
@@ -133,6 +133,7 @@ if __name__ == '__main__':
         "num_epochs": args.epochs,
         "t_max": args.t_max,
         # "img_size": 512,
+        # "img_size": 224,
         'criterion': 'CrossEntropyLoss', # FIXME CHECK IF WORKS WITH TCN
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
