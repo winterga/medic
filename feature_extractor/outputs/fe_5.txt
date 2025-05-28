@@ -1,0 +1,474 @@
+Arch: Resnet50
+Pretrained: False
+********num_cores is 16********
+/home/user/Documents/GitHub/medic/data/images_3/
+checkpoints/Resnet50_021225_07
+/home/user/Documents/GitHub/medic/data/images_3/
+Unique labels in train dataset: {0, 1, 2}
+Unique labels in valid dataset: {0, 1, 2}
+Unique labels in train dataset: {0, 1, 2}
+Unique labels in valid dataset: {0, 1, 2}
+Device: cuda:0
+Embedding Size:  3
+Train: cuda:0
+Epoch 0/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.06%
+Class 1: 62.31%
+Class 2: 77.42%
+Training Loss: 0.00817487750035748
+Training Acc: 0.09712634979962756
+
+Per-Class Accuracy:
+Class 0: 99.93%
+Class 1: 59.61%
+Class 2: 0.00%
+Validate Acc: 0.09799826596545853
+Validate Loss: 0.01406348549996395
+
+Epoch 1/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.50%
+Class 1: 83.08%
+Class 2: 100.00%
+Training Loss: 0.0038780704375467917
+Training Acc: 0.09865299703225043
+
+Per-Class Accuracy:
+Class 0: 98.89%
+Class 1: 78.21%
+Class 2: 0.00%
+Validate Acc: 0.09778942238929708
+Validate Loss: 0.025599410805297623
+
+Epoch 2/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.46%
+Class 1: 87.31%
+Class 2: 100.00%
+Training Loss: 0.003411386545923534
+Training Acc: 0.0988372475603256
+
+Per-Class Accuracy:
+Class 0: 95.54%
+Class 1: 86.54%
+Class 2: 0.00%
+Validate Acc: 0.09493522684842386
+Validate Loss: 0.035070157641800194
+
+Epoch 3/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.63%
+Class 1: 89.74%
+Class 2: 90.32%
+Training Loss: 0.0027216974345791838
+Training Acc: 0.099100462600433
+
+Per-Class Accuracy:
+Class 0: 99.46%
+Class 1: 75.49%
+Class 2: 0.00%
+Validate Acc: 0.09821976672805402
+Validate Loss: 0.014861860983582154
+
+Epoch 4/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.68%
+Class 1: 91.67%
+Class 2: 93.55%
+Training Loss: 0.0022903577109691362
+Training Acc: 0.09925181124849475
+
+Per-Class Accuracy:
+Class 0: 98.09%
+Class 1: 80.94%
+Class 2: 0.00%
+Validate Acc: 0.09713757728794466
+Validate Loss: 0.014963390608848017
+
+Epoch 5/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.64%
+Class 1: 91.79%
+Class 2: 100.00%
+Training Loss: 0.002047517072751466
+Training Acc: 0.09923207012048668
+
+Per-Class Accuracy:
+Class 0: 98.93%
+Class 1: 76.55%
+Class 2: 0.00%
+Validate Acc: 0.09775777942321201
+Validate Loss: 0.025082932974994674
+
+Epoch 6/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.74%
+Class 1: 91.67%
+Class 2: 96.77%
+Training Loss: 0.002103408454075671
+Training Acc: 0.0993110346325189
+
+Per-Class Accuracy:
+Class 0: 98.42%
+Class 1: 72.01%
+Class 2: 100.00%
+Validate Acc: 0.09731477789802105
+Validate Loss: 0.012395614057611856
+
+Epoch 7/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.75%
+Class 1: 94.10%
+Class 2: 100.00%
+Training Loss: 0.0017436701986905483
+Training Acc: 0.09945580290457798
+
+Per-Class Accuracy:
+Class 0: 98.85%
+Class 1: 82.00%
+Class 2: 0.00%
+Validate Acc: 0.09790333706720333
+Validate Loss: 0.013559221482554621
+
+Epoch 8/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.78%
+Class 1: 94.23%
+Class 2: 100.00%
+Training Loss: 0.0014925236156691768
+Training Acc: 0.09949528516059408
+
+Per-Class Accuracy:
+Class 0: 98.36%
+Class 1: 80.03%
+Class 2: 0.00%
+Validate Acc: 0.09735907805054014
+Validate Loss: 0.013617922325401426
+
+Epoch 9/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.78%
+Class 1: 94.62%
+Class 2: 93.55%
+Training Loss: 0.0014721900816567534
+Training Acc: 0.09950186553659676
+
+Per-Class Accuracy:
+Class 0: 99.33%
+Class 1: 66.11%
+Class 2: 100.00%
+Validate Acc: 0.09793498003328839
+Validate Loss: 0.01358186095887626
+
+Epoch 10/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.71%
+Class 1: 95.26%
+Class 2: 100.00%
+Training Loss: 0.0014319552853000943
+Training Acc: 0.09948212440858871
+
+Per-Class Accuracy:
+Class 0: 99.67%
+Class 1: 62.18%
+Class 2: 100.00%
+Validate Acc: 0.09809319486371375
+Validate Loss: 0.017619399733471645
+
+Epoch 11/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.78%
+Class 1: 94.23%
+Class 2: 96.77%
+Training Loss: 0.0015161810840031067
+Training Acc: 0.09948212440858871
+
+Per-Class Accuracy:
+Class 0: 99.24%
+Class 1: 68.84%
+Class 2: 100.00%
+Validate Acc: 0.09796029440615646
+Validate Loss: 0.014177464003091821
+
+Epoch 12/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.79%
+Class 1: 96.41%
+Class 2: 100.00%
+Training Loss: 0.0012266029259269471
+Training Acc: 0.09961373192864241
+
+Per-Class Accuracy:
+Class 0: 98.61%
+Class 1: 70.20%
+Class 2: 100.00%
+Validate Acc: 0.09741603538949327
+Validate Loss: 0.025229524941048496
+
+Epoch 13/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.85%
+Class 1: 95.77%
+Class 2: 100.00%
+Training Loss: 0.0011396537673254816
+Training Acc: 0.09963347305665046
+
+Per-Class Accuracy:
+Class 0: 98.07%
+Class 1: 73.37%
+Class 2: 0.00%
+Validate Acc: 0.09679583325422592
+Validate Loss: 0.020025750575883496
+
+Epoch 14/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.78%
+Class 1: 95.77%
+Class 2: 100.00%
+Training Loss: 0.0011267359033796495
+Training Acc: 0.09956766929662361
+
+Per-Class Accuracy:
+Class 0: 99.07%
+Class 1: 77.91%
+Class 2: 0.00%
+Validate Acc: 0.09794130862650541
+Validate Loss: 0.027023734645487248
+
+Epoch 15/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.84%
+Class 1: 96.28%
+Class 2: 93.55%
+Training Loss: 0.001033028590181479
+Training Acc: 0.09964005343265314
+
+Per-Class Accuracy:
+Class 0: 98.11%
+Class 1: 82.90%
+Class 2: 0.00%
+Validate Acc: 0.09723883477941687
+Validate Loss: 0.020458920793413604
+
+Epoch 16/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.84%
+Class 1: 96.54%
+Class 2: 93.55%
+Training Loss: 0.0010908469104945124
+Training Acc: 0.09965321418465851
+
+Per-Class Accuracy:
+Class 0: 98.89%
+Class 1: 69.59%
+Class 2: 100.00%
+Validate Acc: 0.09766285052495681
+Validate Loss: 0.014145116906878984
+
+Epoch 17/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.85%
+Class 1: 97.05%
+Class 2: 100.00%
+Training Loss: 0.0009124246191798066
+Training Acc: 0.09970585719267999
+
+Per-Class Accuracy:
+Class 0: 99.70%
+Class 1: 63.84%
+Class 2: 100.00%
+Validate Acc: 0.09819445235518597
+Validate Loss: 0.01340279657797202
+
+Epoch 18/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.86%
+Class 1: 97.18%
+Class 2: 100.00%
+Training Loss: 0.0008252217738659369
+Training Acc: 0.09971901794468536
+
+Per-Class Accuracy:
+Class 0: 98.52%
+Class 1: 70.65%
+Class 2: 100.00%
+Validate Acc: 0.09735274945732313
+Validate Loss: 0.012285062257845012
+
+Epoch 19/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.87%
+Class 1: 97.56%
+Class 2: 100.00%
+Training Loss: 0.0008411551894633272
+Training Acc: 0.0997453394486961
+
+Per-Class Accuracy:
+Class 0: 99.22%
+Class 1: 72.16%
+Class 2: 0.00%
+Validate Acc: 0.09784637972825021
+Validate Loss: 0.01785589780663469
+
+Epoch 20/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.89%
+Class 1: 97.56%
+Class 2: 100.00%
+Training Loss: 0.0007075337014076393
+Training Acc: 0.09976508057670416
+
+Per-Class Accuracy:
+Class 0: 96.89%
+Class 1: 74.89%
+Class 2: 0.00%
+Validate Acc: 0.0957326295937676
+Validate Loss: 0.02391119860854481
+
+Epoch 21/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.89%
+Class 1: 97.56%
+Class 2: 100.00%
+Training Loss: 0.0007571773299209846
+Training Acc: 0.09976508057670416
+
+Per-Class Accuracy:
+Class 0: 99.67%
+Class 1: 66.41%
+Class 2: 100.00%
+Validate Acc: 0.09827039547379013
+Validate Loss: 0.00978879149587545
+
+Epoch 22/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.94%
+Class 1: 97.95%
+Class 2: 100.00%
+Training Loss: 0.00066242619916487
+Training Acc: 0.09983746471273369
+
+Per-Class Accuracy:
+Class 0: 99.74%
+Class 1: 59.00%
+Class 2: 0.00%
+Validate Acc: 0.09778942238929708
+Validate Loss: 0.010901392604063967
+
+Epoch 23/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.90%
+Class 1: 97.82%
+Class 2: 100.00%
+Training Loss: 0.0005565730821910103
+Training Acc: 0.0997914020807149
+
+Per-Class Accuracy:
+Class 0: 99.25%
+Class 1: 80.33%
+Class 2: 0.00%
+Validate Acc: 0.098213438134837
+Validate Loss: 0.020134984347651538
+
+Epoch 24/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.90%
+Class 1: 97.95%
+Class 2: 100.00%
+Training Loss: 0.0005454792527166631
+Training Acc: 0.09979798245671757
+
+Per-Class Accuracy:
+Class 0: 99.17%
+Class 1: 79.73%
+Class 2: 0.00%
+Validate Acc: 0.0981185092365818
+Validate Loss: 0.018971716664258977
+
+Epoch 25/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.92%
+Class 1: 98.72%
+Class 2: 100.00%
+Training Loss: 0.00039420709462979905
+Training Acc: 0.09985720584074174
+
+Per-Class Accuracy:
+Class 0: 99.63%
+Class 1: 75.34%
+Class 2: 0.00%
+Validate Acc: 0.09837165296526235
+Validate Loss: 0.020029408166624133
+
+Epoch 26/149
+----------
+
+Per-Class Accuracy:
+Class 0: 99.90%
+Class 1: 98.33%
+Class 2: 100.00%
+Training Loss: 0.0005168543858728159
+Training Acc: 0.09981772358472564
+
+Per-Class Accuracy:
+Class 0: 98.27%
+Class 1: 81.69%
+Class 2: 0.00%
+Validate Acc: 0.0973400922708891
+Validate Loss: 0.03872161025639467
+
+Epoch 27/149
+----------

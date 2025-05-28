@@ -10,7 +10,8 @@ import random
 from datetime import datetime
 
 from .train import train_model
-from .only_test import test_model
+# from .only_test import test_model
+from .check_data import test_model
 import glob
 import argparse
 import multiprocessing

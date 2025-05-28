@@ -16,9 +16,9 @@ def plot_accuracy_graph(epochs, train_acc_class0, train_acc_class1, train_acc_cl
     ax_high_train.plot(epochs, train_overall, label='Train Overall', lw=2, linestyle='--')
 
     # Plot Validation accuracies (including Class 2) on the higher plot
-    ax_high_val.plot(epochs, val_acc_class0, label='Validation (a) Within Collecting System Anatomy', lw=2)
-    ax_high_val.plot(epochs, val_acc_class1, label='Validation (b) Before Scope Insertion/After Scope Removal', lw=2)
-    ax_high_val.plot(epochs, val_acc_class2, label='Validation (c) Menu Screens', lw=2)
+    ax_high_val.plot(epochs, val_acc_class0, label='Validation (0) Within Collecting System Anatomy', lw=2)
+    ax_high_val.plot(epochs, val_acc_class1, label='Validation (1) Before Scope Insertion/After Scope Removal', lw=2)
+    ax_high_val.plot(epochs, val_acc_class2, label='Validation (2) Menu Screens', lw=2)
     ax_high_val.plot(epochs, val_overall, label='Validation Overall', lw=2, linestyle='--')
 
     # Duplicate the lower part for the 0%-5% range for context

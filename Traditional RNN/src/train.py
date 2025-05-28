@@ -1,321 +1,229 @@
-import time
-import torch
-from torchvision.transforms import Compose
-from torch.utils import data
-import functools
-import tqdm
 import numpy as np
-import random
-from .image_transforms import apply_transforms, apply_customaugment_transforms, apply_autoaugment_transforms, RESIZE, TO_TENSOR, RANDOM_ROTATION, RANDOM_HORIZONTAL_FLIP, NORMALIZE, COLOR_JITTER, GAUSSIAN_BLUR
-from torchvision.models import resnet50
-from .rnn_dataset import RNNImageDataset as RNNDataset
-import torch.optim as optim
-from torchvision import transforms as v2
-import matplotlib.pyplot as plt
-import torch.nn as nn
-from sklearn.metrics import roc_auc_score, confusion_matrix, classification_report
-import seaborn as sns
-from collections import defaultdict
-import json
 import torch
 import torch.nn as nn
-import pprint
+from torchvision import datasets
+from torchvision.transforms import v2
+import torch.utils.data as data
+from torch.utils.data import Subset
+import torch.optim as optim
+from collections import Counter
+import time, os, copy
+from .resnet import resnet50
+import tqdm
+import random
 
-def init_weights(m):
-    """Custom weight initialization function."""
-    if isinstance(m, nn.Conv2d):
-        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        if m.bias is not None:
-            nn.init.zeros_(m.bias)
-    
-    elif isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight)
-        nn.init.zeros_(m.bias)
-
-    elif isinstance(m, nn.LayerNorm):
-        nn.init.ones_(m.weight)
-        nn.init.zeros_(m.bias)
-
-    elif isinstance(m, nn.MultiheadAttention):
-        nn.init.xavier_uniform_(m.in_proj_weight)
-        nn.init.xavier_uniform_(m.out_proj.weight)
-        if m.in_proj_bias is not None:
-            nn.init.zeros_(m.in_proj_bias)
-
-    elif isinstance(m, nn.TransformerEncoderLayer):
-        # Initialize feedforward network inside Transformer
-        for param in [m.linear1.weight, m.linear2.weight]:
-            nn.init.xavier_normal_(param)
-        nn.init.zeros_(m.linear1.bias)
-        nn.init.zeros_(m.linear2.bias)
-
-class CNNFeatureExtractor(nn.Module):
-    def __init__(self, base_model):
-        super(CNNFeatureExtractor, self).__init__()
-        self.base_model = nn.Sequential(*list(base_model.children())[:-1])  # Removing the last classification layer
-
-    def forward(self, x):
-        features = self.base_model(x)
-        return features.view(features.size(0), -1)  # Flatten the output
-    
-class CNNFeatureExtractor(nn.Module):
-    def __init__(self, base_model):
-        super(CNNFeatureExtractor, self).__init__()
-        self.base_model = nn.Sequential(*list(base_model.children())[:-1])  
-
-        # Freeze the feature extractor
-        # for param in self.base_model.parameters():
-        #     param.requires_grad = False
-
-    def forward(self, x):
-        features = self.base_model(x)
-        return features.view(features.size(0), -1)
-
-class CNN_LSTM_SequenceModel(nn.Module):
-    def __init__(self, cnn_model, hidden_size=512, num_classes=2, num_layers=2):
-        super(CNN_LSTM_SequenceModel, self).__init__()
-        self.cnn_extractor = CNNFeatureExtractor(cnn_model)
-        self.lstm = nn.LSTM(input_size=2048, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
-
-    def forward(self, x):
-        batch_size, seq_len, c, h, w = x.shape  
-        x = x.view(batch_size * seq_len, c, h, w)  
-        cnn_out = self.cnn_extractor(x)  
-        cnn_out = cnn_out.view(batch_size, seq_len, -1)  
-        lstm_out, _ = self.lstm(cnn_out)
-        # print(lstm_out)
-        logits = self.fc(lstm_out)  
-        return logits
-
-def custom_collate_fn(batch):
+def get_subset_indices(dataset, subset_percentage=0.1):
     """
-    Custom collate function for batching sequences of images and their corresponding labels.
-    
-    Args:
-    - batch: List of tuples (image_sequence, label) where image_sequence is a tensor
-      and label is the corresponding label.
-    
-    Returns:
-    - A tuple containing:
-      1. image_sequences: A tensor of shape [batch_size, seq_len, channels, height, width].
-      2. labels: A tensor of shape [batch_size].
+    Get indices for a subset of the dataset (e.g., 10% of the data).
     """
-    # Separate image sequences and labels
-    image_sequences, labels, paths = zip(*batch)
-    
-    # Stack image sequences into a single tensor of shape [batch_size, seq_len, channels, height, width]
-    image_sequences = torch.stack(image_sequences, dim=0)
-    
-    # Stack labels into a tensor of shape [batch_size]
-    labels = torch.tensor(labels)
-    
-    return image_sequences, labels, paths
+    # Randomly shuffle indices
+    indices = list(range(len(dataset)))
+    subset_size = int(len(indices) * subset_percentage)
+    subset_indices = random.sample(indices, subset_size)  # Randomly sample 10% of the data
+    return subset_indices
 
-def all_from_same_video(file_list):
-    video_ids = {path.split('/')[-1].split('_frame')[0] for path in file_list}
+def apply_gpu_transforms(image, transform_list):
+    """
+    Apply a series of GPU-based augmentations to an image tensor.
+    :param image: A tensor image already on the GPU.
+    :param transform_list: List of transforms to be applied to the image.
+    :return: Transformed image on the GPU.
+    """
+    for t in transform_list:
+        image = t(image)
+    return image
 
-    # Extract the frame numbers from the file paths
-    frame_numbers = sorted([int(path.split('_frame_')[-1].split('.')[0]) for path in file_list])
-    
-    # Check if the list of frame numbers is continuous (no gaps)
-    for i in range(1, len(frame_numbers)):
-        if frame_numbers[i] != frame_numbers[i - 1] + 1:
-            return False  # If there's a gap between frames, return False
-    
-    # Check if all files belong to the same video
-    video_ids = {path.split('/')[-1].split('_frame')[0] for path in file_list}
-    return len(video_ids) == 1
+def get_class_weights(dataset):
+    """ Compute class weights for handling imbalance """
+    class_counts = Counter(dataset.targets)  # Count occurrences of each class
+    num_classes = len(class_counts)
+    total_samples = sum(class_counts.values())
 
-def seed_worker(seed, worker_id):
-    torch.manual_seed(seed + worker_id)
-    np.random.seed(seed + worker_id)
-    random.seed(seed + worker_id)
-    torch.cuda.manual_seed(seed + worker_id)
-    torch.cuda.manual_seed_all(seed + worker_id)
-    torch.backends.cudnn.deterministic = True  # Ensure deterministic behavior
-    torch.backends.cudnn.benchmark = False     # May slow down training a bit, but makes sure results are reproducible
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    # Compute weights: inverse frequency
+    weights = {cls: total_samples / (num_classes * count) for cls, count in class_counts.items()}
+
+    # Convert to tensor
+    weight_tensor = torch.tensor([weights[i] for i in range(num_classes)], dtype=torch.float)
+
+    print(f"Class Weights: {weight_tensor}")
+    return weight_tensor
 
 def load_train(params, hyper_params):
-    print("Loading train")
-    # Define the CPU transformations
-    cpu_transforms = [
-        RESIZE(size=hyper_params['img_size']),
-        TO_TENSOR(),
-        NORMALIZE(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    cpu_train_list = [
+        v2.Resize(size=(hyper_params['img_size'], hyper_params['img_size'])),
+        v2.ToTensor(),
+    ]
+    cpu_valid_list = [
+        v2.Resize(size=(hyper_params['img_size'], hyper_params['img_size'])),
+        v2.ToTensor(),
     ]
 
-    print("Train Dir:", params['train_dir'])
-    print("Valid Dir:", params['valid_dir'])
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model_ft = CNN_LSTM_SequenceModel(resnet50())
-    model_ft = CNN_LSTM_SequenceModel(torch.load('/home/user/Documents/GitHub/medic/feature_extractor/checkpoints/Resnet50_022125_12/Resnet50_022125_12.pth'))
-    activation = nn.Sigmoid()
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.AdamW(model_ft.parameters(), lr=hyper_params['learning_rate'], weight_decay=hyper_params['weight_decay'])
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=hyper_params['t_max'], eta_min=hyper_params['learning_rate']/100.)
-
-    dataset = {
-        'train': RNNDataset(params['train_dir'], device, cpu_transforms),
-        'valid': RNNDataset(params['valid_dir'], device, cpu_transforms),
-        'test': RNNDataset(params['test_dir'], device, cpu_transforms)
+    # GPU-based transforms for heavy augmentations
+    gpu_train_list = []
+    
+    if hyper_params['normalize']:
+        cpu_train_list.append(v2.Normalize([0.485, 0.456, 0.406],
+                                           [0.229, 0.224, 0.225]))
+        cpu_valid_list.append(v2.Normalize([0.485, 0.456, 0.406],
+                                           [0.229, 0.224, 0.225]))
+    image_transforms = {
+        'train': v2.Compose(cpu_train_list),
+        'valid': v2.Compose(cpu_valid_list)
     }
+    # Load data from folders
+    dataset = {
+        'train': datasets.ImageFolder(root=params['train_dir'], transform=image_transforms['train']),
+        'valid': datasets.ImageFolder(root=params['valid_dir'], transform=image_transforms['valid']),
+    }
+    
+    def remap_labels(dataset, old_label, new_label):
+        dataset.targets = [new_label if label == old_label else label for label in dataset.targets]
+        dataset.samples = [(path, new_label if label == old_label else label) for path, label in dataset.samples]
+
+    # Remap labels for binary classification
+    unique_train_labels = set(dataset['train'].targets)
+    unique_valid_labels = set(dataset['valid'].targets)
+
+    print(f"Unique labels in train dataset: {unique_train_labels}")
+    print(f"Unique labels in valid dataset: {unique_valid_labels}")
+    remap_labels(dataset['train'], old_label=3, new_label=1)
+    remap_labels(dataset['valid'], old_label=3, new_label=1)
+
+    unique_train_labels = set(dataset['train'].targets)
+    unique_valid_labels = set(dataset['valid'].targets)
+
+    print(f"Unique labels in train dataset: {unique_train_labels}")
+    print(f"Unique labels in valid dataset: {unique_valid_labels}")
+    
+    # Size of train and validation data
     dataset_sizes = {
         'train': len(dataset['train']),
-        'valid': len(dataset['valid']),
-        'test': len(dataset['test'])
+        'valid': len(dataset['valid'])
     }
+
+    # Create iterators for data loading
     dataloaders = {
-        'train': data.DataLoader(dataset['train'], batch_size=1, shuffle=False,
-                                 num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True, 
-                                 prefetch_factor=4, worker_init_fn=functools.partial(seed_worker, 11111), persistent_workers=True, collate_fn=custom_collate_fn),
-        'valid': data.DataLoader(dataset['valid'], batch_size=1, shuffle=False,
-                                 num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True, 
-                                 prefetch_factor=4, worker_init_fn=functools.partial(seed_worker, 11111), persistent_workers=True, collate_fn=custom_collate_fn),
-        'test': data.DataLoader(dataset['test'], batch_size=1, shuffle=False,
-                                 num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True, 
-                                 prefetch_factor=4, worker_init_fn=functools.partial(seed_worker, 11111), persistent_workers=True, collate_fn=custom_collate_fn),
+        'train': data.DataLoader(dataset['train'], batch_size=hyper_params['batch_size'], shuffle=True,
+                            num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
+        'valid': data.DataLoader(dataset['valid'], batch_size=hyper_params['batch_size'], shuffle=False,
+                            num_workers=hyper_params['cpu_count'], pin_memory=True, drop_last=True),
     }
-    return model_ft, dataloaders, dataset_sizes, criterion, optimizer, scheduler, activation, device
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+
+    model_ft = resnet50(num_classes=3, num_channels=3)
+    activation = nn.Softmax(dim=1)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.AdamW(model_ft.parameters(), lr=hyper_params['learning_rate'])
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=hyper_params['num_epochs'], eta_min=hyper_params['learning_rate']/100.)
+
+    return model_ft, dataloaders, dataset_sizes, criterion, optimizer, scheduler, activation, device, gpu_train_list
+
 
 def train_model(params, hyper_params):
-    # Early Stopping Variable Declaration
-    patience = hyper_params.get('patience')  # Early stopping patience
-
-    # Training Variable Declarationw
     since = time.time()
-    [ 
-        model,
-        dataloaders, 
-        data_sizes, 
-        criterion, 
-        optimizer, 
-        scheduler, 
-        activation,
-        device
-    ] = load_train(params, hyper_params)
-    
+
+    model, dataloaders, data_sizes, criterion, optimizer, scheduler, activation, device, gpu_train_list = load_train(params, hyper_params)
     model.to(device)
-    batch_size = 1
+    print(f"Train: {next(model.parameters()).device}")
+
+    train_weights = get_class_weights(dataloaders['train'].dataset).to(device)
+    valid_weights = get_class_weights(dataloaders['valid'].dataset).to(device)
+
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_loss = float('inf')
+    logger = open(os.path.join(params['save_dir'], params['name'] + '.txt'), "w")
 
     for epoch in range(hyper_params['num_epochs']):
         print('Epoch {}/{}'.format(epoch, hyper_params['num_epochs'] - 1))
         print('-' * 10)
 
-        epoch_loss = 0.0
-    
-
         # Each epoch has a training and validation phase
-        for phase in ['train', 'valid', 'test']:
-            vids_count = {}
-            model.train() if phase == 'train' else model.eval()
+        for phase in ['train', 'valid']:
+            criterion = nn.CrossEntropyLoss(weight=train_weights if phase == 'train' else valid_weights)
+            if phase == 'train':
+                model.train()  # Set model to training mode
+            else:
+                model.eval()   # Set model to evaluate mode
 
-            all_preds = []
-            all_labels = []
-            all_probs = []
-
+            running_loss = 0.0
             running_corrects = 0
-            total_samples = 0
+            class_corrects = {i: 0 for i in range(3)}
+            class_totals = {i: 0 for i in range(3)}
 
             with tqdm.tqdm(total=len(dataloaders[phase]), desc=f'{phase.capitalize()} Epoch {epoch}', unit='batch') as pbar:
-                
-                print("Size: ", len(dataloaders[phase].dataset))
-                
-                vid_count = 0
-                vid_count_correct = 0
-                count = 0
-                mod = 6
-                current_label = -1
-                total_weighted_avg = 0
-                done = False
-                for images, labels, paths in dataloaders[phase]:
-                    # print(paths)
-                    paths = paths[0]
-                    if(all_from_same_video(paths)):
-                        done = False
-                        # if count % mod == 0:
-                        # if (phase == 'train' and count % mod == 0) or phase != 'train':
-                        images = images.to(device)
-                        labels = labels.to(device)
-                        # print(labels, paths)
-                        optimizer.zero_grad() # Clear gradients from previous batch
-                        # logit, weighted_avg, probs = model(images)  # Forward pass
-                        logits = model(images)
-                        # print(logits, labels)
-                        loss = criterion(logits, labels.unsqueeze(1).float())
 
-                        probs = torch.sigmoid(logits)
-                        preds = (probs > 0.5)
-                        print(logits, loss)#, probs, preds, labels, paths)
+                # Iterate over data.
+                for inputs, labels in dataloaders[phase]:
+                    inputs = inputs.to(device, non_blocking=True) # tensor(2.6400) tensor(-2.1179)
+                    inputs = apply_gpu_transforms(inputs, gpu_train_list)
+                    labels = labels.to(device, non_blocking=True)
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
 
-                        running_corrects += (preds == labels).sum().item()
-                        vid_count_correct += (preds == labels).sum().item()
-                        vid_count += 1
-                        total_samples += labels.size(0)
-                        current_label = labels[0].item()
-                        # total_weighted_avg += weighted_avg.item()
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == 'train'):
+                        outputs = model(inputs)  # Model outputs logits, not probabilities
+                        _, preds = torch.max(outputs, 1)  # Get the index of the max logit (class prediction)
+                        
+                        # Ensure labels are of the correct shape
+                        labels = labels.long()  # CrossEntropyLoss expects labels as integers
+                                        
+                        # Calculate loss
+                        loss = criterion(outputs, labels)
 
-                        all_preds.extend(preds.detach().cpu().numpy())
-                        all_labels.extend(labels.detach().cpu().numpy())
-                        all_probs.extend(probs.detach().cpu().numpy())
-                        # print("Preds", preds)
-                        # print("Labels", labels)
-                        # print("Probs", probs)
-                        # print("WA", weighted_avg)
-
-                        # logit = torch.log(weighted_avg / (1 - weighted_avg)).unsqueeze(0)
-                        # loss = criterion(logit, labels.unsqueeze(1).float())
-                        epoch_loss += loss.item()
-
+                        # backward + optimize only if in training phase
                         if phase == 'train':
-                            loss.backward()  # Backward pass
-                            optimizer.step()  # Update weights
+                            loss.backward()
+                            optimizer.step()
 
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Clip gradients
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
 
-                    else:
-                        print('Not Same paths:', paths)
-                        if (not done):
-                            video = paths[0].split('/')[-1].split('_frame')[0]
-                            print(labels)
-                            vids_count[video] = f'{current_label} - {vid_count_correct} - {vid_count} - {vid_count_correct / vid_count} - {total_weighted_avg / vid_count} - {total_weighted_avg}'
-                            done = True
-                            vid_count = 0
-                            vid_count_correct = 0
-                            current_label = -1
-                            total_weighted_avg = 0
-                    # pbar.update(mod if phase == 'train' else 1)
+                    pred_labels = preds.byte().cpu().numpy()
+                    labels = labels.cpu().numpy()
+
+                    for i in range(len(labels)):
+                        label = labels[i].item()
+                        class_totals[label] += 1
+                        if preds[i] == labels[i]:
+                            class_corrects[label] += 1
+
                     pbar.update(1)
-                    count += 1
-                # count += 1
 
-            pprint.pprint(vids_count, sort_dicts=False)
-            epoch_accuracy = running_corrects / total_samples
-            epoch_loss /= len(dataloaders[phase])
-            print(f"{phase.capitalize()} Epoch {epoch} Accuracy: {epoch_accuracy:.4f}")
-            print(f"{phase.capitalize()} Epoch {epoch} Loss: {epoch_loss:.4f}")
-            print(f"Running Corrects: {running_corrects} -- Total Samples: {total_samples}")
+            epoch_loss = running_loss / data_sizes[phase]
+            epoch_acc = running_corrects.double() / data_sizes[phase]
 
-            try:
-                roc_auc = roc_auc_score(all_labels, all_probs)
-            except ValueError:
-                roc_auc = float('nan')  # In case of only one class present
+            per_class_accuracy = {cls: (class_corrects[cls] / class_totals[cls]) * 100 if class_totals[cls] > 0 else 0 
+                                  for cls in range(3)}  # Assuming 4 classes
 
-            # Compute Confusion Matrix
-            cm = confusion_matrix(all_labels, all_preds)
+            print(f"\nPer-Class Accuracy:")
+            for cls, accuracy in per_class_accuracy.items():
+                print(f"Class {cls}: {accuracy:.2f}%")
 
-            print(f"{phase.capitalize()} Epoch {epoch} ROC-AUC: {roc_auc:.4f}")
+            # deep copy the model
+            if phase == 'train':
+                print(f'Training Loss: {epoch_loss}')
+                print(f'Training Acc: {epoch_acc}')
+            if phase == 'valid':
+                print(f"Validate Acc: {epoch_acc}")
+                print(f"Validate Loss: {epoch_loss}")
+                if epoch_loss < best_loss:
+                    best_loss = epoch_loss
+                    best_model_wts = copy.deepcopy(model.state_dict())
+                    torch.save(model, os.path.join(params['save_dir'], f'{params["name"]}.pth'))
 
-            """
-            [[TP FN]
-             [FP TN]]
-            """
-            print("Confusion Matrix:")
-            print(cm)
+        print()
+        scheduler.step()
 
-            # Print detailed classification report
-            print("\nClassification Report:")
-            print(classification_report(all_labels, all_preds, digits=4))
-                    
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+    # print('Best val Acc: {:4f}'.format(best_acc))
+
+    # load best model weights
+    model.load_state_dict(best_model_wts)
+    # experiment.end()
     return model

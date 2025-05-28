@@ -12,6 +12,8 @@
 *.heic
 *.heif
 *.MP4
+**/checkpoints/*
+**/__pycache__/*
 
 /data/datamover_FE/*.txt
 /data/datamover_TS/*.txt
