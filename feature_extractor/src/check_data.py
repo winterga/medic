@@ -11,6 +11,7 @@ import time, os, copy
 from .resnet import resnet50
 import tqdm
 import random
+import sys
 import re
 from .truth_data import transition_frames
 
@@ -19,13 +20,14 @@ from torch.utils.data import Dataset, DataLoader
 
 import torch.nn.init as init
 import torch.nn.functional as F
+from pathlib import Path
 
 class AlternatingSequenceDataset(Dataset):
     def __init__(self, root_dir, sequence_length=5, transform=None, transition_frames=None):
         self.root_dir = root_dir
         self.sequence_length = sequence_length
         self.transform = transform
-        self.transition_frames = transition_frames
+        self.transition_frames = {}
         self.transition_frames_count = {}
 
         self.video_names = set()
@@ -44,6 +46,7 @@ class AlternatingSequenceDataset(Dataset):
         # print(len(self.transition_frames[self.video_names[0]]))
 
         for video_name in self.video_names:
+            self.transition_frames[video_name] = transition_frames[video_name]
             self.transition_frames_count[video_name] = int(len(self.transition_frames[video_name]))
             print("Transition frames count for video:", video_name, "is", self.transition_frames_count[video_name])
 
@@ -194,7 +197,7 @@ class SequenceDataset(Dataset):
         self.root_dir = root_dir
         self.sequence_length = sequence_length
         self.transform = transform
-        self.transition_frames = transition_frames
+        self.transition_frames = {}
         self.transition_frames_count = {}
 
         # TODO: Why do we do this?
@@ -213,6 +216,7 @@ class SequenceDataset(Dataset):
         print("Vids", self.video_names)
 
         for video_name in self.video_names:
+            self.transition_frames[video_name] = transition_frames[video_name]
             self.transition_frames_count[video_name] = int(len(self.transition_frames[video_name]))
             print("Transition frames count for video:", video_name, "is", self.transition_frames_count[video_name])
 
@@ -571,6 +575,8 @@ def test_model(params, hyper_params):
                 transition_count = 0
                 correct_transition_count = 0
 
+                video_transitions_frames = {}
+
                 # Iterate over data.
                 for j, (sequences, paths, label, info) in enumerate(dataloaders[phase]):
                     if i % mod == 0:
@@ -629,7 +635,7 @@ def test_model(params, hyper_params):
                             total_sample_sequences += label.size(0)  # Increment total samples
                             predicted_sequences_count += (preds.item() == 1)
                             truth_sequence_count += (label.item() == 1)
-                            correct_transition_count += 1
+                            correct_transition_count += (preds.item() == label.item() == 1)
 
                             # Always start with 1 or add (0 | 1) to a current sequence
                             if phase != 'train':
@@ -639,26 +645,62 @@ def test_model(params, hyper_params):
                                     paths = [p[1] for p in current_sequence_labels][0]
 
 
-                                    # Check if ends in [0, 0] -- end of transition
-                                    if curr_preds[-2:] == [0, 0] or i == len(dataloaders[phase]) - 1:
-                                        ## WHY DOES `i == len(dataloaders[phase]) - 1` NOT WORK?
-                                        if i == len(dataloaders[phase]) - 1:
-                                            print("Last batch -- curr_preds == 1", curr_preds)
+                                    # curr_preds is a list of predictions for the current sequence
+                                    # Check if the final two (2) of curr_preds `curr_preds[-2:]` ends in [0, 0] -- end of transition
+                                    # print(curr_preds, curr_preds[-2:])
+                                    # print(j, len(dataloaders[phase]), j == len(dataloaders[phase]) - 1)
+                                    # print(int(len(dataloaders[phase]) / mod) * mod, len(dataloaders[phase]) - 1, j)
+                                    if curr_preds[-2:] == [0, 0] or j == int(len(dataloaders[phase]) / mod) * mod:
 
-                                        if curr_preds.count(1) >= 2:
+                                        # We need to be sure to account for the modular -- for example, if mod == 5, then we need to check if the last batch is the last batch
+                                        # We only need to count the ones where it is > 2 (or do we? - consider that an image should be in 1/2/3 transitions?)
+                                        if curr_preds.count(1) >= 2 or j == int(len(dataloaders[phase]) / mod) * mod:
                                             # Count transitions
                                             transition_count += 1
                                         
 
                                             # Print total transition frame start and end
-                                            path_start = paths[0][0]
-                                            path_end = paths[2][4]
-                                            # print(path_start)
-                                            # print(path_end)
-                                            # path_start = path_start[0][0][0]
-                                            # path_end = path_end[0][2][4]
-
+                                            path_start = paths[0][0][0]
+                                            path_end = paths[2][4][0]
                                             print(f"Transition located starting @ path_start: {path_start} and end: {path_end}")
+
+                                            # Predict the frame using the middle of the sequence.
+                                            """
+                                            EXAMPLE: path_start: ['/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/val/10_31_2022_07_18_14_fullvid.MP4_frame_00496.jpg'] and end: ['/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/val/10_31_2022_07_18_14_fullvid.MP4_frame_00510.jpg']
+                                            """
+                                            # print("Path Start: ", path_start)
+                                            # print(Path(path_start).name)
+
+                                            ## First frame  
+                                            first_pathname = Path(path_start).name  # Get just the filename
+                                            first_match = re.match(r"(.*\.MP4)_frame_(\d+)\.jpg", first_pathname, re.IGNORECASE)
+                                            second_pathname = Path(path_end).name  # Get just the filename
+                                            second_match = re.match(r"(.*\.MP4)_frame_(\d+)\.jpg", second_pathname, re.IGNORECASE)
+
+                                            if first_match and second_match:
+                                                first_video_name = first_match.group(1)
+                                                first_frame_number = int(first_match.group(2))
+                                                second_video_name = second_match.group(1)
+                                                second_frame_number = int(second_match.group(2))
+                                                if first_video_name != second_video_name:
+                                                    print("Warning: Video names do not match!")
+                                                    sys.exit(1)
+                                                if first_frame_number >= second_frame_number:
+                                                    print("Warning: First frame number is not less than second frame number!")
+                                                    sys.exit(1)
+                                                # Print the video name (only need first one since we checked if they are the same)
+                                                # print("Video name:", first_video_name)
+                                                # Print the frame numbers
+                                                # print("Frame numbers", first_frame_number, " ", second_frame_number)
+                                                # Calculate the middle frame number
+                                                middle_frame_number = (first_frame_number + second_frame_number) // 2
+                                                video_transitions_frames.setdefault(first_video_name, []).append(middle_frame_number)
+
+                                                # print("Transition Frame: ", middle_frame_number)
+                                            else:
+                                                print("No match found")
+
+                                            # Associate the frame to the specific video and then count
 
                                         # Clear the sequences
                                         current_sequence_labels = []
@@ -679,8 +721,20 @@ def test_model(params, hyper_params):
                 print('')
                 
                 print(f"***FRAME DATA EPOCH {epoch} {phase}***")
-                print("# of Predicted Frames: ", transition_count)
-                print("# of Truth Frames: ", dataloaders[phase].dataset.transition_frames_count)
+                print(dataloaders[phase].dataset.transition_frames)
+                for video_name, truth_frames in dataloaders[phase].dataset.transition_frames.items():
+                    truths = truth_frames
+                    preds = video_transitions_frames.get(video_name, [])
+                    matched_pairs, unmatched_truths, unmatched_preds = match_predictions_to_truths(truths, preds)
+                    print('Video: ', video_name)
+                    print('Truth Frames: \t', truths)
+                    print('Pred Frames: \t', preds)
+                    print('Match Frames: \t', matched_pairs)
+                    print('Unm Truths: ', unmatched_truths)
+                    print('Unm Preds:', unmatched_preds)
+                # print("# of Predicted Frames: ", transition_count)
+                # print("# of Truth Frames: ", dataloaders[phase].dataset.transition_frames)
+                # print("Video Transitions Frames: ", video_transitions_frames)
                 print(f"***FRAME DATA EPOCH {epoch} {phase}***")
 
             scheduler.step()
@@ -702,3 +756,30 @@ def test_model(params, hyper_params):
     return model
 
 
+# Leniency of 30 frames (or 1 second) is given to best match
+def match_predictions_to_truths(truths, preds, max_distance=30):
+    truths = sorted(truths)
+    preds = sorted(preds)
+    matched_truths = set()
+    matched_preds = set()
+    matched_pairs = []
+
+    for pred in preds:
+        best_match = None
+        best_distance = float('inf')
+        for i, truth in enumerate(truths):
+            if i in matched_truths:
+                continue  # already matched
+            distance = abs(pred - truth)
+            if distance <= max_distance and distance < best_distance:
+                best_match = i
+                best_distance = distance
+        if best_match is not None:
+            matched_truths.add(best_match)
+            matched_preds.add(pred)
+            matched_pairs.append((truths[best_match], pred))
+
+    unmatched_truths = [truths[i] for i in range(len(truths)) if i not in matched_truths]
+    unmatched_preds = [pred for pred in preds if pred not in matched_preds]
+
+    return matched_pairs, unmatched_truths, unmatched_preds
