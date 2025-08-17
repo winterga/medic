@@ -1,0 +1,4 @@
+{
+  "include": ["Traditional RNN/**/*.py"],
+  "exclude": ["**/__pycache__/**", "**/.*", "**/node_modules/**"]
+}

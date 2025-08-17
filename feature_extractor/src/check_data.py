@@ -13,6 +13,7 @@ import tqdm
 import random
 import sys
 import re
+from statistics import mean, stdev
 from .truth_data import transition_frames
 
 from PIL import Image
@@ -67,8 +68,10 @@ class AlternatingSequenceDataset(Dataset):
         label_1_sequences = []
 
         for video, frames in self.video_to_frames.items():
+            print("Video", video, "has", len(frames), "frames")
             num_frames = len(frames)
             triplet_span = 3 * sequence_length
+            print("Number of sequences:", len(frames) - triplet_span + 1)
             for i in range(num_frames - triplet_span + 1):
                 prev_seq = frames[i : i + sequence_length]
                 curr_seq = frames[i + sequence_length : i + 2 * sequence_length]
@@ -81,6 +84,8 @@ class AlternatingSequenceDataset(Dataset):
                         label_1_sequences.append((video, prev_seq, curr_seq, next_seq, label))
                     else:
                         label_0_sequences.append((video, prev_seq, curr_seq, next_seq, label))
+        print("Label 0 sequences:", len(label_0_sequences))
+        print("Label 1 sequences:", len(label_1_sequences))
 
         # Shuffle both sets
         random.shuffle(label_0_sequences)
@@ -88,6 +93,7 @@ class AlternatingSequenceDataset(Dataset):
 
         # Match lengths: use min length to balance
         min_len = min(len(label_1_sequences), len(label_0_sequences))
+        print("Min length for balancing:", min_len)
         label_0_sequences = label_0_sequences[:min_len]
         label_1_sequences = label_1_sequences[:min_len]
 
@@ -355,7 +361,8 @@ class SequenceDataset(Dataset):
         return images_tensor, all_paths, transition_label, transition_info
 
 class StrongTransitionLSTM(nn.Module):
-    def __init__(self, feature_dim=6150, num_classes=3, hidden_dim=256, num_layers=2, dropout=0.3):
+
+    def __init__(self, feature_dim=6153, num_classes=3, hidden_dim=256, num_layers=2, dropout=0.3):
         """
         feature_dim: Dimension of CNN feature output (2048 for ResNet-50's second-to-last layer)
         num_classes: Number of classes predicted by the CNN (3 for your 3 classes: 0, 1, 2)
@@ -363,10 +370,10 @@ class StrongTransitionLSTM(nn.Module):
         super().__init__()
         
         # Update input_dim to the combined size (features + predictions)
-        input_dim = feature_dim + num_classes  # Combine CNN features and predictions
+        # input_dim = feature_dim + num_classes  # Combine CNN features and predictions
         
         # LSTM setup for sequence input (CNN features and predictions combined)
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, 
+        self.lstm = nn.LSTM(feature_dim, hidden_dim, num_layers, 
                             batch_first=True, dropout=dropout, bidirectional=True)
         
         # Fully connected layer to output transition score
@@ -404,6 +411,7 @@ class StrongTransitionLSTM(nn.Module):
         out = self.fc(out)
         
         # Sigmoid output for binary classification (transition/no-transition)
+        # Probability of Positive (1) Class [Transition in this case]
         return torch.sigmoid(out).squeeze(1)  # Output shape: (B,)
     
 class CNNModel(nn.Module):
@@ -478,8 +486,22 @@ def load_train(params, hyper_params):
     }
     
     # Load data from folders
+    dataset_map = {
+        'alternating': AlternatingSequenceDataset,
+        'sequential': SequenceDataset
+    }
+    try:
+        dataset_class = dataset_map[hyper_params['training_style']]
+    except KeyError:
+        raise ValueError(f"Invalid training_style: {hyper_params['training_style']}")
+
+    train_dataset = dataset_class(
+        root_dir='/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/train/',
+        transform=image_transforms['train'],
+        transition_frames=transition_frames
+    )
     dataset = {
-        'train': AlternatingSequenceDataset(root_dir='/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/train/', transform=image_transforms['train'], transition_frames=transition_frames),
+        'train': train_dataset,
         'valid': SequenceDataset(root_dir='/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/val/', transform=image_transforms['valid'], transition_frames=transition_frames),
         'test': SequenceDataset(root_dir='/home/user/Documents/GitHub/medic/data/images_ts_fe_30_singles/test/', transform=image_transforms['test'], transition_frames=transition_frames)
     }
@@ -505,7 +527,21 @@ def load_train(params, hyper_params):
     print(f"Device: {device}")
 
     cnn_model = CNNModel()
-    model_ft = StrongTransitionLSTM().to(device)
+     # The model needs to accept 4 different sizes:
+    # 1. 3x5 (5 images, 3 parts) w/ Logits          -> 3  * (2048 + 3)  = 6153
+    # 2. 15 (15 images, single part) w/ Logits      -> 15 * (2048 + 3)  = 30765
+    # 3. 3x5 (5 images, 3 parts) w/out Logits       -> 3  * (2048)      = 6144
+    # 4. 15 (15 images, single part) w/out Logits   -> 15 * (2048)      = 30720
+    input_dim = 0
+    if hyper_params['images_in_batch'] == '3x5' and hyper_params['no_add_logits'] :
+        input_dim = 6144
+    elif hyper_params['images_in_batch'] == '3x5' and not hyper_params['no_add_logits']:
+        input_dim = 6153
+    elif hyper_params['images_in_batch'] == '15' and hyper_params['no_add_logits']:
+        input_dim = 2048
+    elif hyper_params['images_in_batch'] == '15' and not hyper_params['no_add_logits']:
+        input_dim = 2051
+    model_ft = StrongTransitionLSTM(input_dim).to(device)
     activation = nn.Softmax(dim=1)
     # class_weights = torch.tensor([1, 10]).to(device)
     criterion = nn.BCEWithLogitsLoss()#pos_weight=class_weights[1])
@@ -545,8 +581,12 @@ def test_model(params, hyper_params):
                 i = 0
 
                 epoch_loss = 0
+                epoch_loss_0s = 0
+                epoch_loss_1s = 0
                 total_correct_sequences = 0
                 total_sample_sequences = 0
+                total_sample_sequences_0s = 0
+                total_sample_sequences_1s = 0
                 predicted_sequences_count = 0
                 truth_sequence_count = 0
 
@@ -566,7 +606,7 @@ def test_model(params, hyper_params):
                         a. No transition
                 b. See a [0]
                     a. No transition
-                **THIS STTATES THAT [1, 1, 1, 1, 0, 1, 1, 1] WOULD BE ONE (1) SEQUENCE**
+                **THIS STATES THAT [1, 1, 1, 1, 0, 1, 1, 1] WOULD BE ONE (1) SEQUENCE**
 
                 3. We need to then look at the paths that annotate a transition to consider an EXACT frame as the transition point
 
@@ -579,7 +619,9 @@ def test_model(params, hyper_params):
 
                 # Iterate over data.
                 for j, (sequences, paths, label, info) in enumerate(dataloaders[phase]):
-                    if i % mod == 0:
+
+                    # Train should be all transition sequences, but validation/test should be every 5th
+                    if phase == 'train' or i % mod == 0:
                         sequences = sequences.to(device, non_blocking=True) 
                         label = label.to(device, non_blocking=True).float() 
                         # inputs = apply_gpu_transforms(inputs, gpu_train_list)
@@ -593,30 +635,57 @@ def test_model(params, hyper_params):
 
                             batch_preds = []
                             batch_sequence = []
-                            # batch_paths = path
-                            for i in range(num_parts):  # prev, curr, next
-                                seq = sequences[:, i]  # [B, S, C, H, W]
-                                features, logits = cnn_model(seq.view(B * S, C, H, W))  # [B*S, F], [B*S, 3]
-                                features = features.view(B, S, -1)  # [B, S, F]
-                                logits = logits.view(B, S, -1)  # [B, S, 3]
-                                probs = F.softmax(logits, dim=-1)  # [B, S, 3] - softmax across the class dimension
+                            
+                            if(hyper_params['images_in_batch'] == '3x5'):
+                                # batch_paths = path
+                                for i in range(num_parts):  # prev, curr, next
+                                    seq = sequences[:, i]  # [B, S, C, H, W]
+                                    features, logits = cnn_model(seq.view(B * S, C, H, W))  # [B*S, F], [B*S, 3]
+                                    features = features.view(B, S, -1)  # [B, S, F]
+                                    logits = logits.view(B, S, -1)  # [B, S, 3]
+                                    probs = F.softmax(logits, dim=-1)  # [B, S, 3] - softmax across the class dimension
 
-                                # Get the predicted class index` (0, 1, or 2)
-                                _, preds = torch.max(probs, 2)
-                                batch_preds.append(preds.tolist())  # [B, S, 3]
+                                    # Get the predicted class index` (0, 1, or 2)
+                                    _, preds = torch.max(probs, 2)
+                                    batch_preds.append(preds.tolist())  # [B, S, 3]
 
-                                # print(features.shape, preds.shape, probs.shape)
-                                # print(len(seq), num_parts)
-                                # print(logits)
-                                # print(probs)
-                                # print(preds)
 
-                                # Concatenate features and predictions
-                                combined = torch.cat([features, logits], dim=-1)  # [B, S, F+3]
-                                batch_sequence.append(combined)
+                                    # Concatenate features and predictions
+                                    if hyper_params['no_add_logits']:
+                                        batch_sequence.append(features)  # [B, S, F]
+                                    else:
+                                        combined = torch.cat([features, logits], dim=-1)  # [B, S, F+3]
+                                        batch_sequence.append(combined)
 
-                            full_sequence = torch.cat(batch_sequence, dim=-1)  # [B, S, 3*(F+3)]
+                                full_sequence = torch.cat(batch_sequence, dim=-1)  # [B, S, 3*(F+3)]
+                            
+                            elif (hyper_params['images_in_batch'] == '15'):
+                                # sequences: [B, 3, S, C, H, W] → merge across 3 to form flat [B, 15, C, H, W]
+                                flat_sequence = sequences.view(B, 3 * S, C, H, W)  # [B, 15, C, H, W]
+                                # print("SHAPE", flat_sequence.shape)
+                                
+                                # Flatten batch and sequence to feed into CNN
+                                seq = flat_sequence  # [B, 15, C, H, W]
+                                features, logits = cnn_model(seq.view(B * 15, C, H, W))  # [B*15, F], [B*15, 3]
 
+                                # Reshape back to batch form
+                                features = features.view(B, 15, -1)  # [B, 15, F]
+                                logits = logits.view(B, 15, -1)      # [B, 15, 3]
+                                probs = F.softmax(logits, dim=-1)    # [B, 15, 3]
+
+                                _, preds = torch.max(probs, 2)       # [B, 15]
+                                batch_preds.append(preds.tolist())
+
+                                if hyper_params['no_add_logits']:
+                                    full_sequence = features  # [B, 15, F]
+                                else:
+                                    full_sequence = torch.cat([features, logits], dim=-1)  # [B, 15, F+3]
+
+                            else:
+                                print("NONEXISTENT")
+                                sys.exit(1)
+
+                            # print("SHAPE", full_sequence.shape)
                             outputs = model(full_sequence)  # [B, 1]
                             loss = criterion(outputs, label)  # [B, 1] vs [B, 1]
 
@@ -625,6 +694,8 @@ def test_model(params, hyper_params):
                                 optimizer.step()
                             
                             epoch_loss += loss.item()
+                            epoch_loss_0s += loss.item() if label.item() == 0 else 0
+                            epoch_loss_1s += loss.item() if label.item() == 1 else 0
                             
                             preds = (outputs > 0.5).float()  # Convert logits to binary predictions (0 or 1)
                             print(f"{outputs.item():.6f}", preds.item(), label.item(), batch_preds, info, paths)
@@ -633,6 +704,8 @@ def test_model(params, hyper_params):
                             
                             total_correct_sequences += torch.sum(preds == label.data)  # Count correct predictions
                             total_sample_sequences += label.size(0)  # Increment total samples
+                            total_sample_sequences_0s += (label == 0).sum().item()
+                            total_sample_sequences_1s += (label == 1).sum().item()
                             predicted_sequences_count += (preds.item() == 1)
                             truth_sequence_count += (label.item() == 1)
                             correct_transition_count += (preds.item() == label.item() == 1)
@@ -708,7 +781,15 @@ def test_model(params, hyper_params):
                     i += 1                    
                     pbar.update(1)
 
+                # Best Valid Epoch to run test against
+                if phase == 'valid' and epoch_loss < best_loss:
+                    best_loss = epoch_loss
+                    best_model_wts = copy.deepcopy(model.state_dict())
+                    print(f"Best model weights updated @ Epoch {epoch}.")
+
                 print(f"Avg Epoch {phase} {epoch} Loss", epoch_loss / total_sample_sequences)
+                print(f"Avg Epoch {phase} {epoch} 0s Loss", epoch_loss_0s / total_sample_sequences_0s)
+                print(f"Avg Epoch {phase} {epoch} 1s Loss", epoch_loss_1s / total_sample_sequences_1s)
                 accuracy = total_correct_sequences / total_sample_sequences
                 print(f"{phase.capitalize()} Accuracy: {accuracy * 100:.2f}%")
                 print(f"***SEQUENCE DATA EPOCH {epoch} {phase}***")
@@ -722,6 +803,8 @@ def test_model(params, hyper_params):
                 
                 print(f"***FRAME DATA EPOCH {epoch} {phase}***")
                 print(dataloaders[phase].dataset.transition_frames)
+                total_unmatched_truths = 0
+                total_unmatched_preds = 0
                 for video_name, truth_frames in dataloaders[phase].dataset.transition_frames.items():
                     truths = truth_frames
                     preds = video_transitions_frames.get(video_name, [])
@@ -732,9 +815,30 @@ def test_model(params, hyper_params):
                     print('Match Frames: \t', matched_pairs)
                     print('Unm Truths: ', unmatched_truths)
                     print('Unm Preds:', unmatched_preds)
+
+                    total_unmatched_truths += len(unmatched_truths)
+                    total_unmatched_preds += len(unmatched_preds)
                 # print("# of Predicted Frames: ", transition_count)
                 # print("# of Truth Frames: ", dataloaders[phase].dataset.transition_frames)
                 # print("Video Transitions Frames: ", video_transitions_frames)
+                print('# of Unmatched Truth Frames: ', total_unmatched_truths)
+                print('# of Unmatched Pred Frames: ', total_unmatched_preds)
+                distances = [abs(t - p) for t, p in matched_pairs]
+
+                # Compute statistics
+                if len(distances) > 0:
+                    avg_distance = mean(distances)
+                    min_distance = min(distances)
+                    max_distance = max(distances)
+
+                    print(f"Average distance: {avg_distance}")
+                    print(f"Minimum distance: {min_distance}")
+                    print(f"Maximum distance: {max_distance}")
+                if len(distances) > 1:
+                    std_dev_distance = stdev(distances)
+                    print(f"Standard deviation: {std_dev_distance}")
+                else: 
+                    print("Standard deviation: Not enough data to compute")
                 print(f"***FRAME DATA EPOCH {epoch} {phase}***")
 
             scheduler.step()
@@ -783,3 +887,7 @@ def match_predictions_to_truths(truths, preds, max_distance=30):
     unmatched_preds = [pred for pred in preds if pred not in matched_preds]
 
     return matched_pairs, unmatched_truths, unmatched_preds
+
+# 1. Run Experiment
+# 2. Get Model from checkpoint
+# 3. Place those 15 specific images into TSNE for the model.

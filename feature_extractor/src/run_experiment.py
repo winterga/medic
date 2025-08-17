@@ -115,6 +115,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_augs', type=int, default=0, help='Number of augmentations to use')
     parser.add_argument('--base_dir', type=str, required=True, help='Base directory containing train, val, and test subdirectories')
     parser.add_argument('--embedding_size', type=int, default=2, help='Size of the embedding layer')
+    parser.add_argument('--training_style', type=str, choices=['alternating', 'sequential'], default='alternating', help='Use alternating training strategy')   # Training Sequential or Alternating
+    parser.add_argument('--no_add_logits', action='store_true', help='Add logits to the model output')                                                          # True = DO NOT ADD LOGITS
+    parser.add_argument('--images_in_batch', type=str, default='3x5', choices=['3x5', '15'], help='Use 3x5 or 15 for the model architecture')                   # Use 3x5 or 9 for the model architecture
+    # parser.add_argument('--transformer_embedding_combination_style', type=str, choices=['sequential', '3x5'], default='3x5', help='Training style for the transformer model')      
     args = parser.parse_args()
     print(f'Arch: {args.architecture}')
     print(f'Pretrained: {args.pretrained}')
@@ -154,6 +158,10 @@ if __name__ == '__main__':
         'pretrained': args.pretrained,
         'num_augs': args.num_augs,
         'embedding_size': args.embedding_size,
+        'training_style': args.training_style,
+        'no_add_logits': args.no_add_logits,
+        'images_in_batch': args.images_in_batch,
+        # 'transformer_embedding_combination_style': args.transformer_embedding_combination_style,
     }
     params = {
         'train_dir': data_dirs['train_dir'],
