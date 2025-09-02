@@ -1,182 +1,107 @@
 import random
 import re
 import os
-
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
 class AlternatingSequenceDataset(Dataset):
-    def __init__(self, root_dir, sequence_length=5, transform=None, transition_frames=None):
+    """
+    Dataset for sequences designed to work with SSP (Sliding-Window Sequence Pooling).
+    Each item returns:
+        - images_tensor: [sequence_length, C, H, W]
+        - paths: list of frame paths
+        - transition_label: 1 if any frame in the sequence is a transition
+        - transition_info: indices of transitions within the sequence
+    """
+    def __init__(self, root_dir, sequence_length=15, transform=None, transition_frames=None):
         self.root_dir = root_dir
         self.sequence_length = sequence_length
         self.transform = transform
-        self.transition_frames = {}
-        self.transition_frames_count = {}
+        self.transition_frames = transition_frames or {}
 
+        # Gather all videos
         self.video_names = set()
         pattern = re.compile(r"(.+?_fullvid\.(?:mp4|MP4))_frame_\d+\.jpg")
-
-        with os.scandir(root_dir) as entries:
-            for entry in entries:
-                if not entry.is_file():
-                    continue
-                match = pattern.match(entry.name)
-                if match:
-                    self.video_names.add(match.group(1))
-
+        for fname in os.listdir(root_dir):
+            match = pattern.match(fname)
+            if match:
+                self.video_names.add(match.group(1))
         self.video_names = sorted(self.video_names)
-        # print(self.video_names)
-        # print(len(self.transition_frames[self.video_names[0]]))
 
-        for video_name in self.video_names:
-            self.transition_frames[video_name] = transition_frames[video_name]
-            self.transition_frames_count[video_name] = int(len(self.transition_frames[video_name]))
-            print("Transition frames count for video:", video_name, "is", self.transition_frames_count[video_name])
-
-        # Load and sort image paths
-        self.image_paths = [os.path.join(root_dir, fname) 
-                            for fname in os.listdir(root_dir) 
-                            if fname.endswith(('.png', '.jpg'))]
-        self.image_paths = sorted(self.image_paths, key=self.natural_sort_key)
-
-        # Group by video
+        # Map video -> frame paths
         self.video_to_frames = {}
-        for path in self.image_paths:
-            video_name = self.extract_video_name(path)
-            self.video_to_frames.setdefault(video_name, []).append(path)
+        for fname in sorted(os.listdir(root_dir), key=self.natural_sort_key):
+            video_name = self.extract_video_name(fname)
+            if video_name:
+                self.video_to_frames.setdefault(video_name, []).append(os.path.join(root_dir, fname))
 
-        # Build labeled triplet sequences
-        label_0_sequences = []
-        label_1_sequences = []
-
+        # Build sequences
+        self.sequences = []
         for video, frames in self.video_to_frames.items():
-            print("Video", video, "has", len(frames), "frames")
             num_frames = len(frames)
-            triplet_span = 3 * sequence_length
-            print("Number of sequences:", len(frames) - triplet_span + 1)
-            for i in range(num_frames - triplet_span + 1):
-                prev_seq = frames[i : i + sequence_length]
-                curr_seq = frames[i + sequence_length : i + 2 * sequence_length]
-                next_seq = frames[i + 2 * sequence_length : i + 3 * sequence_length]
-                full_seq = prev_seq + curr_seq + next_seq
+            for i in range(num_frames - sequence_length + 1):
+                seq = frames[i:i+sequence_length]
+                if self.is_sequential(seq):
+                    label = int(self.contains_transition(video, seq))
+                    self.sequences.append((video, seq, label))
 
-                if self.is_sequential(full_seq):
-                    label = int(self.contains_transition(video, curr_seq))
-                    if label == 1:
-                        label_1_sequences.append((video, prev_seq, curr_seq, next_seq, label))
-                    else:
-                        label_0_sequences.append((video, prev_seq, curr_seq, next_seq, label))
-        print("Label 0 sequences:", len(label_0_sequences))
-        print("Label 1 sequences:", len(label_1_sequences))
+        # Alternate 0 and 1 sequences
+        label_0 = [s for s in self.sequences if s[2]==0]
+        label_1 = [s for s in self.sequences if s[2]==1]
+        min_len = min(len(label_0), len(label_1))
+        random.shuffle(label_0)
+        random.shuffle(label_1)
+        self.sequences = [val for pair in zip(label_0[:min_len], label_1[:min_len]) for val in pair]
 
-        # Shuffle both sets
-        random.shuffle(label_0_sequences)
-        random.shuffle(label_1_sequences)
+        print(f"Dataset initialized: {len(self.sequences)} sequences, sequence length {sequence_length}")
 
-        # Match lengths: use min length to balance
-        min_len = min(len(label_1_sequences), len(label_0_sequences))
-        print("Min length for balancing:", min_len)
-        label_0_sequences = label_0_sequences[:min_len]
-        label_1_sequences = label_1_sequences[:min_len]
-
-        # Alternate between 0 and 1
-        self.triplet_sequences = []
-        for i in range(min_len):
-            self.triplet_sequences.append(label_0_sequences[i])
-            self.triplet_sequences.append(label_1_sequences[i])
-
-    def natural_sort_key(self, path):
-        match = re.search(r'(?P<video_name>.*?)(?P<frame_number>\d+)(?:\.jpg|\.png)', os.path.basename(path))
+    def natural_sort_key(self, fname):
+        match = re.search(r'(?P<video_name>.*?)(?P<frame_number>\d+)(?:\.jpg|\.png)', fname)
         if match:
             return (match.group('video_name'), int(match.group('frame_number')))
-        return (path, 0)
+        return (fname, 0)
 
-    def extract_video_name(self, path):
-        match = re.search(r'(.*?)(_frame_)\d+', os.path.basename(path))
+    def extract_video_name(self, fname):
+        match = re.search(r'(.*?)(_frame_)\d+', fname)
         return match.group(1) if match else None
 
     def extract_frame_number(self, path):
         match = re.search(r'_frame_(\d+)', os.path.basename(path))
         return int(match.group(1)) if match else -1
 
-    def is_sequential(self, frame_paths):
-        frame_numbers = [self.extract_frame_number(p) for p in frame_paths]
-        expected = list(range(frame_numbers[0], frame_numbers[0] + len(frame_numbers)))
-        return frame_numbers == expected
-    
-    def get_transition_positions(self, video_name, seq, positions=None):
-        """
-        Return the positions (indices) within `seq` that match transition frames.
-        If `positions` is provided, only those indices are checked (can include negatives).
-        """
+    def is_sequential(self, paths):
+        nums = [self.extract_frame_number(p) for p in paths]
+        return nums == list(range(nums[0], nums[0]+len(nums)))
+
+    def contains_transition(self, video_name, seq):
+        if video_name not in self.transition_frames:
+            return False
+        frame_nums = [self.extract_frame_number(p) for p in seq]
+        return any(f in set(self.transition_frames[video_name]) for f in frame_nums)
+
+    def get_transition_positions(self, video_name, seq):
         if video_name not in self.transition_frames:
             return []
-
+        frame_nums = [self.extract_frame_number(p) for p in seq]
         transition_set = set(self.transition_frames[video_name])
-        seq_len = len(seq)
-
-        if positions is None:
-            indices_to_check = range(seq_len)
-        else:
-            indices_to_check = [
-                i if i >= 0 else seq_len + i
-                for i in positions
-                if -seq_len <= i < seq_len
-            ]
-
-        matching_positions = []
-        for i in indices_to_check:
-            frame_num = self.extract_frame_number(seq[i])
-            if frame_num in transition_set:
-                matching_positions.append(int(i))  # 👈 ensure it's a Python int
-
-        return matching_positions
-    
-    def contains_transition(self, video_name, seq):
-        """
-        Check if the sequence contains a transition frame based on the transition_frames dictionary.
-        A transition is present if any of the frame numbers in the sequence match the transition frames.
-        """
-        if video_name in self.transition_frames:
-            transition_set = set(self.transition_frames[video_name])
-            frame_numbers = [self.extract_frame_number(p) for p in seq]
-            return any(f in transition_set for f in frame_numbers)
-        return False
+        return [i for i, f in enumerate(frame_nums) if f in transition_set]
 
     def __len__(self):
-        return len(self.triplet_sequences)
+        return len(self.sequences)
 
     def __getitem__(self, idx):
-        video_name, prev_seq, curr_seq, next_seq, label = self.triplet_sequences[idx]
-        sequences = [prev_seq, curr_seq, next_seq]
+        print("Getting Sequential seq")
+        video_name, seq_paths, label = self.sequences[idx]
 
-        all_images = []
-        all_paths = []
+        images = []
+        for p in seq_paths:
+            img = Image.open(p).convert("RGB")
+            if self.transform:
+                img = self.transform(img)
+            images.append(img)
+        images_tensor = torch.stack(images)  # [sequence_length, C, H, W]
 
-        for seq in sequences:
-            images = []
-            for path in seq:
-                img = Image.open(path).convert("RGB")
-                if self.transform:
-                    img = self.transform(img)
-                images.append(img)
-            all_images.append(torch.stack(images))  # shape: (sequence_length, C, H, W)
-            all_paths.append(seq)
+        transition_info = self.get_transition_positions(video_name, seq_paths)
 
-        images_tensor = torch.stack(all_images)  # shape: (3, sequence_length, C, H, W)
-
-        # Get transition positions
-        prev_positions = self.get_transition_positions(video_name, prev_seq, positions=[-2, -1])
-        curr_positions = self.get_transition_positions(video_name, curr_seq)
-        next_positions = self.get_transition_positions(video_name, next_seq, positions=[0, 1])
-
-        transition_label = int(bool(curr_positions))  # Still using curr_seq for main label
-
-        transition_info = {
-            "prev": prev_positions,
-            "curr": curr_positions,
-            "next": next_positions
-        }
-
-        return images_tensor, all_paths, transition_label, transition_info
+        return images_tensor, seq_paths, label, transition_info

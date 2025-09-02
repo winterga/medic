@@ -1,15 +1,13 @@
-# from comet_ml import Experiment
-
 import os
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-import yaml
 import torch
 import numpy as np
 import random
 
 from datetime import datetime
 
-from .train import train_model
+# from .train import train_model
+from .train_ssp import train_model
 # from .only_test import test_model
 # from .check_data import test_model
 import glob
@@ -89,7 +87,7 @@ def set_manual_seed(seed_value=42):
 if __name__ == '__main__':
     multiprocessing.set_start_method('spawn', force=True)
 
-    num_cores = os.cpu_count()
+    num_cores = os.cpu_count() or 1
     parser = argparse.ArgumentParser(description='Run experiment with different hyperparameters.')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for the optimizer')
     parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay for the optimizer')

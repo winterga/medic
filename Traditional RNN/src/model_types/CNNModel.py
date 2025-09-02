@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class CNNModel(nn.Module):
+
     def __init__(self):
         super(CNNModel, self).__init__()
         self.original_cnn_model = torch.load("/home/user/Documents/GitHub/medic/feature_extractor/checkpoints/Resnet50_022125_12/Resnet50_022125_12.pth")
@@ -21,3 +22,9 @@ class CNNModel(nn.Module):
         x = x.view(x.size(0), -1)  # Flatten the output
         y = self.logits(x)
         return x, y
+    
+    def get_feature_dim(self):
+        return self.original_cnn_model.fc.in_features
+    
+    def get_num_classees(self):
+        return self.original_cnn_model.fc.out_features
